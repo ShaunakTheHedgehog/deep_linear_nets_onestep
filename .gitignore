@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Data files
+*.pkl
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# Plots / figures
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+
+# Other folders
+anisotropic_experiments/
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
