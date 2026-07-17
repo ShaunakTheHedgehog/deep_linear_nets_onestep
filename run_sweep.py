@@ -45,8 +45,8 @@ COMBOS = [(g, r) for g in GAMMAS for r in RHOS]   # len == 18
 
 
 def default_config():
-    return dict(D=1000, n=500, sigma=0.5, k_l=10.0, ntrials=50, seed=0,
-                lambda_step=0.08, lambda_max=1.0, theory_step=0.01,
+    return dict(D=1000, n=500, sigma=0.4, k_l=10.0, ntrials=100, seed=0,
+                lambda_step=0.01, lambda_max=2.0, theory_step=0.01,
                 out_dir="spiked_sweep")
 
 
