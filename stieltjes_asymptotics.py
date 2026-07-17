@@ -121,9 +121,8 @@ def compute_feature_learning_model_bias_and_variance(n, D, beta_coeff, ridge_lam
     return bias, variance, gen_error
 
 
-def compute_spiked_covariance_intermediate_quantities(n, D, beta_coeff, ridge_lambda, spike_strength, rho, noise_std):
+def compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std):
     psi = n / D
-    k = beta_coeff
     gamma = spike_strength 
     if psi >= 1:
         raise ValueError("This function only supports the overparameterized regime (c < 1).")
@@ -135,13 +134,13 @@ def compute_spiked_covariance_intermediate_quantities(n, D, beta_coeff, ridge_la
     tau_2 = psi * (mp_stieltjes - ridge_lambda * mp_steltjes_prime)
 
     a = tau_1
-    b = 1 - tau_1 - (1. / (1./(1 - tau_1) + gamma * psi * mp_stieltjes))
+    b = gamma * tau_1 * (1 - tau_1) / (1 + gamma * tau_1)  #1 - tau_1 - (1. / (1./(1 - tau_1) + gamma * psi * mp_stieltjes))
 
-    T1 = gamma * psi * mp_stieltjes + (tau_1 / (1. - tau_1))
-    T2 = gamma * psi * mp_steltjes_prime + (tau_2 / ((1 - tau_1)**2))
+    # T1 = gamma * psi * mp_stieltjes + (tau_1 / (1. - tau_1))
+    # T2 = gamma * psi * mp_steltjes_prime + (tau_2 / ((1 - tau_1)**2))
 
     a_tilde = tau_2
-    b_tilde = (T2 / (1 + T1)**2) - tau_2 
+    b_tilde = tau_2 * ( (gamma + 1)/((1 + gamma * tau_1)**2) - 1 )  #(T2 / (1 + T1)**2) - tau_2 
 
     noise_1 = psi * mp_stieltjes * noise_std**2
     noise_2 = psi * mp_steltjes_prime * noise_std**2
@@ -151,19 +150,19 @@ def compute_spiked_covariance_intermediate_quantities(n, D, beta_coeff, ridge_la
     y_Kx_y_term = 1. + (1 + noise_std**2)/psi + gamma * (rho**2) * (2 + gamma + 1./psi)
 
     num_term = (ridge_lambda / psi) * (y_norm_term - ridge_lambda * y_resolvent_term)
-    num = k * num_term
-    denom = 1. + k * (y_Kx_y_term - (ridge_lambda / psi) * y_norm_term + (ridge_lambda**2 / psi) * y_resolvent_term)
+    num = k_l * num_term
+    denom = 1. + k_l * (y_Kx_y_term - (ridge_lambda / psi) * y_norm_term + (ridge_lambda**2 / psi) * y_resolvent_term)
     c_lambda = 1. + (num / denom)
 
     intermediate_quantities = {'psi': psi, 'mp_stieltjes': mp_stieltjes, 'mp_stieltjes_prime': mp_steltjes_prime,
-                               'tau_1': tau_1, 'tau_2': tau_2, 'a': a, 'b': b, 'T1': T1, 'T2': T2, 
+                               'tau_1': tau_1, 'tau_2': tau_2, 'a': a, 'b': b,  
                                'a_tilde': a_tilde, 'b_tilde': b_tilde, 'noise_1': noise_1, 'noise_2': noise_2,
                                'c_num': num, 'c_num_term': num_term, 'c_denom': denom, 'c_lambda': c_lambda}
     
     return intermediate_quantities
 
 
-def compute_spiked_covariance_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, spike_strength, rho, noise_std):
+def compute_spiked_covariance_model_bias_and_variance(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std):
     '''
     Computes the bias, variance, and generalization error of the spiked covariance model.
     
@@ -177,7 +176,6 @@ def compute_spiked_covariance_model_bias_and_variance(n, D, beta_coeff, ridge_la
         noise_std: standard deviation of the noise in the outputs
     '''
     psi = n / D
-    k = beta_coeff
     gamma = spike_strength 
     if psi >= 1:
         raise ValueError("This function only supports the overparameterized regime (c < 1).")
@@ -208,13 +206,13 @@ def compute_spiked_covariance_model_bias_and_variance(n, D, beta_coeff, ridge_la
     # denom = 1. + k * (y_Kx_y_term - (ridge_lambda / psi) * y_norm_term + (ridge_lambda**2 / psi) * y_resolvent_term)
     # c_lambda = 1. + (num / denom)
 
-    vars = compute_spiked_covariance_intermediate_quantities(n, D, beta_coeff, ridge_lambda, spike_strength, rho, noise_std)
+    vars = compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std)
     a = vars['a']
     b = vars['b']
     a_tilde = vars['a_tilde']
     b_tilde = vars['b_tilde']
-    noise_1 = vars['noise_1']
-    noise_2 = vars['noise_2']
+    # noise_1 = vars['noise_1']
+    # noise_2 = vars['noise_2']
     c_lambda = vars['c_lambda']
 
     bias_term1 = (1 - c_lambda * a)**2
@@ -224,7 +222,7 @@ def compute_spiked_covariance_model_bias_and_variance(n, D, beta_coeff, ridge_la
 
     var1 = a + b * rho**2
     var2 = a_tilde + b_tilde * rho**2
-    init_var = (var1 - ridge_lambda * var2 + noise_1 - ridge_lambda * noise_2 - (a**2) - (rho**2) * (2*a*b + b**2))
+    init_var = (var1 - ridge_lambda * var2 + (a_tilde * noise_std**2) - (a**2) - (rho**2) * (2*a*b + b**2))
     variance = (c_lambda**2) * init_var
 
     gen_error = bias + variance 
@@ -236,10 +234,9 @@ def compute_spiked_covariance_model_bias_and_variance(n, D, beta_coeff, ridge_la
     return bias, variance, gen_error
 
 
-def compute_spiked_covariance_dG_dc(n, D, beta_coeff, ridge_lambda, spike_strength, rho, noise_std):
-    k = beta_coeff
+def compute_spiked_covariance_dG_dc(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std):
     gamma = spike_strength
-    vars = compute_spiked_covariance_intermediate_quantities(n, D, beta_coeff, ridge_lambda, spike_strength, rho, noise_std)
+    vars = compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std)
     a = vars['a']
     b = vars['b']
     a_tilde = vars['a_tilde']

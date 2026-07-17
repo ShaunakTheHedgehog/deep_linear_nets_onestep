@@ -41,11 +41,12 @@ def f_init(X_test, X, y, ridge_lambda=0.):
     return w_init, f_inits 
 
 
-def compute_w_feat(X, y, beta, ridge_lambda=0.):
+def compute_w_feat(X, y, k_l, ridge_lambda=0.):
     '''
     Arguments: 
     X               :   D x n matrix of training inputs
     y               :   n-dim vector of targets
+    k_l             :   feature learning update strength
     ridge_lambda    :   ridge regularization strength
     '''
     D, n = X.shape
@@ -53,6 +54,7 @@ def compute_w_feat(X, y, beta, ridge_lambda=0.):
     A = K_x + ridge_lambda * np.eye(n)
     A_inv = np.linalg.pinv(A)
     w_init = compute_w_init(X, y, ridge_lambda)
+    beta = k_l * D / n**2
 
     num = ridge_lambda * beta * np.dot(y, K_x @ A_inv @ y)
     xy = K_x @ y
@@ -63,9 +65,9 @@ def compute_w_feat(X, y, beta, ridge_lambda=0.):
     return w_feat
 
 
-def compute_gen_error(w_star, Sigma, X, y, beta=0., ridge_lambda=0.):
+def compute_gen_error(w_star, Sigma, X, y, k_l=0., ridge_lambda=0.):
     D = len(w_star)
-    w_est = compute_w_feat(X, y, beta=beta, ridge_lambda=ridge_lambda)
+    w_est = compute_w_feat(X, y, k_l=k_l, ridge_lambda=ridge_lambda)
     w_error = w_star - w_est 
     G = np.dot(w_error, Sigma @ w_error) / D 
 
@@ -247,17 +249,17 @@ def calclulate_alpha_beta_gen_error_heatmap(D, n, alpha_exps, beta_exps, ridge_l
 
 
 def spiked_covariance_model_exploration():
-    D = 3_000
-    n = 1_500
+    D = 1000
+    n = 500
     q = 1.*D/n
     psi = 1./q
     noise_std = 0.5
-    rho = 0.8
-    spike_strength = 10.0
-    beta_coeff = 10.
+    rho = 0.4
+    spike_strength = 5.0
+    k_l = 10.
     lambdas = np.arange(0, 1.001, 0.02)
 
-    ntrials = 20
+    ntrials = 50
 
     # first, generate a fixed unit vector v for the spike direction
     v = np.random.randn(D)
@@ -286,8 +288,8 @@ def spiked_covariance_model_exploration():
 
         for j in range(len(lambdas)):
             ridge_lambda = lambdas[j]
-            init_gen_errors[j] += compute_gen_error(w_star, Sigma, X, y, beta=0., ridge_lambda=ridge_lambda) / ntrials
-            feat_gen_errors[j] += compute_gen_error(w_star, Sigma, X, y, beta=beta_coeff, ridge_lambda=ridge_lambda) / ntrials
+            init_gen_errors[j] += compute_gen_error(w_star, Sigma, X, y, k_l=0., ridge_lambda=ridge_lambda) / ntrials
+            feat_gen_errors[j] += compute_gen_error(w_star, Sigma, X, y, k_l=k_l, ridge_lambda=ridge_lambda) / ntrials
 
         print(f'Completed trial {trial+1}/{ntrials} numerics.')
     
@@ -295,7 +297,7 @@ def spiked_covariance_model_exploration():
     for j in range(len(lambdas)):
         ridge_lambda = lambdas[j]
         init_bias, init_variance, init_gen_error_theory[j] = compute_spiked_covariance_model_bias_and_variance(n, D, 0., ridge_lambda, spike_strength, rho, noise_std)
-        feat_bias, feat_variance, feat_gen_error_theory[j] = compute_spiked_covariance_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, spike_strength, rho, noise_std)
+        feat_bias, feat_variance, feat_gen_error_theory[j] = compute_spiked_covariance_model_bias_and_variance(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std)
        
     print('Completed theory computations.')
 
@@ -306,7 +308,7 @@ def spiked_covariance_model_exploration():
         'rho': rho,
         'spike_strength': spike_strength,
         'noise_std': noise_std,
-        'beta_coeff': beta_coeff,
+        'k_l': k_l,
         'lambdas': lambdas,
         'init_gen_errors': init_gen_errors,
         'feat_gen_errors': feat_gen_errors,
@@ -340,7 +342,7 @@ def numerical_exploration():
     q = 1.*D/n
     psi = 1./q
     noise_std = 0.3
-    beta_coeff = 10.
+    k_l = 10.
     lambdas = np.arange(0, 1.001, 0.02)
 
     ntrials = 20
@@ -372,8 +374,8 @@ def numerical_exploration():
 
         for j in range(len(lambdas)):
             ridge_lambda = lambdas[j]
-            init_gen_errors[j] += compute_gen_error(w_star, Sigma, X, y, beta=0., ridge_lambda=ridge_lambda) / ntrials
-            feat_gen_errors[j] += compute_gen_error(w_star, Sigma, X, y, beta=beta_coeff, ridge_lambda=ridge_lambda) / ntrials
+            init_gen_errors[j] += compute_gen_error(w_star, Sigma, X, y, k_l=0., ridge_lambda=ridge_lambda) / ntrials
+            feat_gen_errors[j] += compute_gen_error(w_star, Sigma, X, y, k_l=k_l, ridge_lambda=ridge_lambda) / ntrials
 
         print(f'Completed trial {trial+1}/{ntrials} numerics.')
     
@@ -381,7 +383,7 @@ def numerical_exploration():
     for j in range(len(lambdas)):
         ridge_lambda = lambdas[j]
         _, _, init_gen_error_theory[j] = compute_linear_model_bias_and_variance(n, D, ridge_lambda, noise_std)
-        _, _, feat_gen_error_theory[j] = compute_feature_learning_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, noise_std)
+        _, _, feat_gen_error_theory[j] = compute_feature_learning_model_bias_and_variance(n, D, k_l, ridge_lambda, noise_std)
        
     print('Completed theory computations.')
 
@@ -389,7 +391,7 @@ def numerical_exploration():
         'D': D,
         'n': n,
         'noise_std': noise_std,
-        'beta_coeff': beta_coeff,
+        'k_l': k_l,
         'lambdas': lambdas,
         'init_gen_errors': init_gen_errors,
         'feat_gen_errors': feat_gen_errors,
