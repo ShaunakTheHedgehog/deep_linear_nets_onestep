@@ -256,10 +256,10 @@ def spiked_covariance_model_exploration():
     noise_std = 0.5
     rho = 0.4
     spike_strength = 5.0
-    k_l = 10.
+    k_l = 1.
     lambdas = np.arange(0, 1.001, 0.02)
 
-    ntrials = 50
+    ntrials = 100
 
     # first, generate a fixed unit vector v for the spike direction
     v = np.random.randn(D)

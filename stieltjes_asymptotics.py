@@ -51,18 +51,12 @@ def mp_stieltjes_derivative(z, c):
 
 def compute_linear_model_bias_and_variance(n, D, ridge_lambda, noise_std):
     """
-    Computes the bias, variance, and generalization error of the ridgeless linear model
+    Computes the bias, variance, and generalization error of the baseline linear model
     in the proportional asymptotics regime using the MP Stieltjes transform.
     """
     psi = n / D
     if psi >= 1:
-        raise ValueError("This function only supports the overparameterized regime (c < 1).")
-
-    # m_val = mp_stieltjes(-ridge_lambda, c)
-    # m_prime_val = mp_stieltjes_derivative(-ridge_lambda, c)
-
-    # bias = ridge_lambda**2 * m_prime_val**2 / (1 - ridge_lambda * m_prime_val)**2
-    # variance = noise_std**2 * m_val / (1 - ridge_lambda * m_prime_val)
+        raise ValueError("This function only supports the overparameterized regime (psi < 1).")
 
     mp_stieltjes = mp_stieltjes_transform(-ridge_lambda, psi)
     mp_steltjes_prime = mp_stieltjes_derivative(-ridge_lambda, psi)
@@ -84,48 +78,48 @@ def compute_linear_model_bias_and_variance(n, D, ridge_lambda, noise_std):
     return bias, variance, gen_error
 
 
-def compute_feature_learning_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, noise_std):
-    """
-    Computes the bias, variance, and generalization error of the feature learning model
-    in the proportional asymptotics regime using the MP Stieltjes transform.
-    """
-    psi = n / D
-    k = beta_coeff
-    if psi >= 1:
-        raise ValueError("This function only supports the overparameterized regime (c < 1).")
+# def compute_feature_learning_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, noise_std):
+#     """
+#     Computes the bias, variance, and generalization error of the feature learning model
+#     in the proportional asymptotics regime using the MP Stieltjes transform.
+#     """
+#     psi = n / D
+#     k = beta_coeff
+#     if psi >= 1:
+#         raise ValueError("This function only supports the overparameterized regime (psi < 1).")
 
-    mp_stieltjes = mp_stieltjes_transform(-ridge_lambda, psi)
-    mp_steltjes_prime = mp_stieltjes_derivative(-ridge_lambda, psi)
+#     mp_stieltjes = mp_stieltjes_transform(-ridge_lambda, psi)
+#     mp_steltjes_prime = mp_stieltjes_derivative(-ridge_lambda, psi)
 
-    alpha_1 = psi * (1 - ridge_lambda * mp_stieltjes)
-    alpha_2 = psi * (mp_stieltjes - ridge_lambda * mp_steltjes_prime)
+#     alpha_1 = psi * (1 - ridge_lambda * mp_stieltjes)
+#     alpha_2 = psi * (mp_stieltjes - ridge_lambda * mp_steltjes_prime)
 
-    noise_1 = psi * mp_stieltjes * noise_std**2
-    noise_2 = psi * mp_steltjes_prime * noise_std**2
+#     noise_1 = psi * mp_stieltjes * noise_std**2
+#     noise_2 = psi * mp_steltjes_prime * noise_std**2
 
-    y_norm_term = 1 + noise_std**2
-    y_trace_term = 1 - ridge_lambda * mp_stieltjes + (noise_std**2)*mp_stieltjes
+#     y_norm_term = 1 + noise_std**2
+#     y_trace_term = 1 - ridge_lambda * mp_stieltjes + (noise_std**2)*mp_stieltjes
 
-    num = (ridge_lambda * k / psi) * (y_norm_term - ridge_lambda * y_trace_term)
-    denom = 1 + k * (1 + ((1 + noise_std**2) / psi) - (ridge_lambda * y_norm_term / psi) + (ridge_lambda**2 / psi) * y_trace_term ) 
-    c_lambda = 1. + (num / denom)
+#     num = (ridge_lambda * k / psi) * (y_norm_term - ridge_lambda * y_trace_term)
+#     denom = 1 + k * (1 + ((1 + noise_std**2) / psi) - (ridge_lambda * y_norm_term / psi) + (ridge_lambda**2 / psi) * y_trace_term ) 
+#     c_lambda = 1. + (num / denom)
 
-    bias = (1 - c_lambda * alpha_1)**2
-    variance = (c_lambda**2) * (alpha_1 - alpha_1**2 - ridge_lambda * alpha_2 + noise_1 - ridge_lambda * noise_2)
-    gen_error = bias + variance
+#     bias = (1 - c_lambda * alpha_1)**2
+#     variance = (c_lambda**2) * (alpha_1 - alpha_1**2 - ridge_lambda * alpha_2 + noise_1 - ridge_lambda * noise_2)
+#     gen_error = bias + variance
 
-    bias = bias.real
-    variance = variance.real
-    gen_error = gen_error.real
+#     bias = bias.real
+#     variance = variance.real
+#     gen_error = gen_error.real
 
-    return bias, variance, gen_error
+#     return bias, variance, gen_error
 
 
 def compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std):
     psi = n / D
     gamma = spike_strength 
     if psi >= 1:
-        raise ValueError("This function only supports the overparameterized regime (c < 1).")
+        raise ValueError("This function only supports the overparameterized regime (psi < 1).")
 
     mp_stieltjes = mp_stieltjes_transform(-ridge_lambda, psi)
     mp_steltjes_prime = mp_stieltjes_derivative(-ridge_lambda, psi)
@@ -142,8 +136,8 @@ def compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, s
     a_tilde = tau_2
     b_tilde = tau_2 * ( (gamma + 1)/((1 + gamma * tau_1)**2) - 1 )  #(T2 / (1 + T1)**2) - tau_2 
 
-    noise_1 = psi * mp_stieltjes * noise_std**2
-    noise_2 = psi * mp_steltjes_prime * noise_std**2
+    # noise_1 = psi * mp_stieltjes * noise_std**2
+    # noise_2 = psi * mp_steltjes_prime * noise_std**2
 
     y_norm_term = 1 + noise_std**2 + gamma * rho**2
     y_resolvent_term = ((a + b * rho**2) / psi) + (noise_std**2)*mp_stieltjes
@@ -156,7 +150,7 @@ def compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, s
 
     intermediate_quantities = {'psi': psi, 'mp_stieltjes': mp_stieltjes, 'mp_stieltjes_prime': mp_steltjes_prime,
                                'tau_1': tau_1, 'tau_2': tau_2, 'a': a, 'b': b,  
-                               'a_tilde': a_tilde, 'b_tilde': b_tilde, 'noise_1': noise_1, 'noise_2': noise_2,
+                               'a_tilde': a_tilde, 'b_tilde': b_tilde, 
                                'c_num': num, 'c_num_term': num_term, 'c_denom': denom, 'c_lambda': c_lambda}
     
     return intermediate_quantities
@@ -169,7 +163,7 @@ def compute_spiked_covariance_model_bias_and_variance(n, D, k_l, ridge_lambda, s
     Arguments:
         n: number of samples
         D: data dimension
-        beta_coeff: strength of feature learning update
+        k_l: feature learning update strength
         ridge_lambda: ridge regularization strength
         spike_strength: strength of the spike in the covariance
         rho: alignment between true regression vector and the spike direction
@@ -178,41 +172,13 @@ def compute_spiked_covariance_model_bias_and_variance(n, D, k_l, ridge_lambda, s
     psi = n / D
     gamma = spike_strength 
     if psi >= 1:
-        raise ValueError("This function only supports the overparameterized regime (c < 1).")
-
-    # mp_stieltjes = mp_stieltjes_transform(-ridge_lambda, psi)
-    # mp_steltjes_prime = mp_stieltjes_derivative(-ridge_lambda, psi)
-
-    # tau_1 = psi * (1 - ridge_lambda * mp_stieltjes)
-    # tau_2 = psi * (mp_stieltjes - ridge_lambda * mp_steltjes_prime)
-
-    # a = tau_1
-    # b = 1 - tau_1 - (1. / (1./(1 - tau_1) + gamma * psi * mp_stieltjes))
-
-    # T1 = gamma * psi * mp_stieltjes + (tau_1 / (1. - tau_1))
-    # T2 = gamma * psi * mp_steltjes_prime + (tau_2 / ((1 - tau_1)**2))
-
-    # a_tilde = tau_2
-    # b_tilde = (T2 / (1 + T1)**2) - tau_2 
-
-    # noise_1 = psi * mp_stieltjes * noise_std**2
-    # noise_2 = psi * mp_steltjes_prime * noise_std**2
-
-    # y_norm_term = 1 + noise_std**2 + gamma * rho**2
-    # y_resolvent_term = ((a + b * rho**2) / psi) + (noise_std**2)*mp_stieltjes
-    # y_Kx_y_term = 1. + (1 + noise_std**2)/psi + gamma * (rho**2) * (2 + gamma + 1./psi)
-
-    # num = ridge_lambda * (k / psi) * (y_norm_term - ridge_lambda * y_resolvent_term)
-    # denom = 1. + k * (y_Kx_y_term - (ridge_lambda / psi) * y_norm_term + (ridge_lambda**2 / psi) * y_resolvent_term)
-    # c_lambda = 1. + (num / denom)
+        raise ValueError("This function only supports the overparameterized regime (psi < 1).")
 
     vars = compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std)
     a = vars['a']
     b = vars['b']
     a_tilde = vars['a_tilde']
     b_tilde = vars['b_tilde']
-    # noise_1 = vars['noise_1']
-    # noise_2 = vars['noise_2']
     c_lambda = vars['c_lambda']
 
     bias_term1 = (1 - c_lambda * a)**2
@@ -241,8 +207,8 @@ def compute_spiked_covariance_dG_dc(n, D, k_l, ridge_lambda, spike_strength, rho
     b = vars['b']
     a_tilde = vars['a_tilde']
     b_tilde = vars['b_tilde']
-    noise_1 = vars['noise_1']
-    noise_2 = vars['noise_2']
+    # noise_1 = vars['noise_1']
+    # noise_2 = vars['noise_2']
     c_lambda = vars['c_lambda']
     c_num_term = vars['c_num_term']
     c_denom = vars['c_denom']
@@ -251,7 +217,7 @@ def compute_spiked_covariance_dG_dc(n, D, k_l, ridge_lambda, spike_strength, rho
     
     var1 = a + b * rho**2
     var2 = a_tilde + b_tilde * rho**2
-    init_var = (var1 - ridge_lambda * var2 + noise_1 - ridge_lambda * noise_2 - (a**2) - (rho**2) * (2*a*b + b**2))
+    init_var = (var1 - ridge_lambda * var2 + (a_tilde * noise_std**2) - (a**2) - (rho**2) * (2*a*b + b**2))
     dV_dc = 2 * c_lambda * init_var
     dG_dc = dB_dc + dV_dc 
 
