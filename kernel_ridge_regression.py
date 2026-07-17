@@ -53,7 +53,8 @@ def compute_w_feat(X, y, k_l, ridge_lambda=0.):
     K_x = (1./D) * (X.T @ X)
     A = K_x + ridge_lambda * np.eye(n)
     A_inv = np.linalg.pinv(A)
-    w_init = compute_w_init(X, y, ridge_lambda)
+    w_init = (1./D**0.5) * X @ A_inv @ y
+    # w_init = compute_w_init(X, y, ridge_lambda)
     beta = k_l * D / n**2
 
     num = ridge_lambda * beta * np.dot(y, K_x @ A_inv @ y)
