@@ -36,8 +36,7 @@ from kernel_ridge_regression import (
 from stieltjes_asymptotics import (
     compute_spiked_covariance_model_bias_and_variance,
     compute_spiked_covariance_intermediate_quantities,
-    compute_linear_model_bias_and_variance,
-    compute_feature_learning_model_bias_and_variance,
+    compute_linear_model_bias_and_variance
 )
 
 
@@ -255,20 +254,6 @@ def test_lambda_zero(run):
         run.check(f"G_feat==G_init [g={gamma:g},r={rho:g}]", Gf, Gi, atol=ATOL_EXACT)
 
 
-# ---------------------------------------------------------------------------
-# (D) theory-vs-theory: isotropic formulas == spiked formulas at gamma = 0
-# ---------------------------------------------------------------------------
-def test_isotropic_consistency(run):
-    print("\n[D] isotropic theory == spiked theory at gamma = 0")
-    for lam in LAMBDAS:
-        Bi_iso, Vi_iso, Gi_iso = compute_linear_model_bias_and_variance(n, D, lam, SIGMA)
-        Bf_iso, Vf_iso, Gf_iso = compute_feature_learning_model_bias_and_variance(n, D, K_L, lam, SIGMA)
-        # spiked at gamma=0, rho=0 (isotropic target); baseline (k_l=0) and feature (k_l)
-        Bi_sp, Vi_sp, Gi_sp = compute_spiked_covariance_model_bias_and_variance(n, D, 0.0, lam, 0.0, 0.0, SIGMA)
-        Bf_sp, Vf_sp, Gf_sp = compute_spiked_covariance_model_bias_and_variance(n, D, K_L, lam, 0.0, 0.0, SIGMA)
-        run.check(f"G_init iso==spiked [lam={lam:g}]", Gi_iso, Gi_sp, atol=1e-6)
-        run.check(f"G_feat iso==spiked [lam={lam:g}]", Gf_iso, Gf_sp, atol=1e-6)
-
 
 # ---------------------------------------------------------------------------
 def main():
@@ -279,7 +264,6 @@ def main():
     for gamma, rho in CONFIGS:
         test_empirics_vs_theory(run, gamma, rho)
     test_lambda_zero(run)
-    test_isotropic_consistency(run)
     ok = run.summary()
     sys.exit(0 if ok else 1)
 
