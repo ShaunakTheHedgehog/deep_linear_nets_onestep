@@ -231,6 +231,19 @@ def calculate_dG_finite_differencing(Gs, spacing):
     return np.diff(Gs) / spacing
 
 
+def dG_dlambda_dk_at_zero(psi, gamma, rho, noise_std):
+    """
+    Computes the derivative of the generalization error with respect to k_l and lambda
+    at k_l = 0 and lambda = 0 for the spiked covariance model.
+    """
+    coeff = -2. * (1 + noise_std**2 + gamma * rho**2)
+    rho_coeff = (1 - psi) * gamma * (1 + gamma) / (1 + gamma * psi)**2
+    sigma_coeff = -1. / (1 - psi) 
+    main_term = rho_coeff * rho**2 + sigma_coeff * noise_std**2
+    dG_dlambda_dk = coeff * main_term
+    return dG_dlambda_dk
+
+
 def depth_lambda_dG_dk_heatmap(n, D, spike_strength, rho, noise_std):
     q = D / n
     lambdas = np.arange(0, 1.01, 0.01)
@@ -292,32 +305,32 @@ def generate_gen_error_advantage_curve():
 
 
 if __name__ == "__main__":
-    n = 10_000
-    D = 20_000 
-    spike_strength = 3.0
-    rho = 0.1
-    noise_std = 0.
-    ridge_lambda = 0.1
+    n = 500
+    D = 1000 
+    spike_strength = 5.0
+    rho = 0.5
+    noise_std = 0.5
+    # ridge_lambda = 0.1
 
-    k_ls = np.arange(0, 1.01, 0.01)
-    spacing = 0.01
-    dG_dk, dG_dc, dc_dk = compute_spiked_covariance_dG_dc(n, D, k_ls, ridge_lambda, spike_strength, rho, noise_std)
+    # k_ls = np.arange(0, 1.01, 0.01)
+    # spacing = 0.01
+    # dG_dk, dG_dc, dc_dk = compute_spiked_covariance_dG_dc(n, D, k_ls, ridge_lambda, spike_strength, rho, noise_std)
 
-    _, _, Gs = compute_spiked_covariance_model_bias_and_variance(n, D, k_ls, ridge_lambda, spike_strength, rho, noise_std)
-    dGs_manual = calculate_dG_finite_differencing(Gs, spacing)
+    # _, _, Gs = compute_spiked_covariance_model_bias_and_variance(n, D, k_ls, ridge_lambda, spike_strength, rho, noise_std)
+    # dGs_manual = calculate_dG_finite_differencing(Gs, spacing)
 
-    plt.figure()
-    plt.plot(k_ls, dG_dk)
-    plt.plot(k_ls[:-1], dGs_manual, linestyle='dashed')
-    plt.show()
+    # plt.figure()
+    # plt.plot(k_ls, dG_dk)
+    # plt.plot(k_ls[:-1], dGs_manual, linestyle='dashed')
+    # plt.show()
 
-    explore_depth_effect_on_gen_error(n, D, ridge_lambda, spike_strength, rho, noise_std)
+    # explore_depth_effect_on_gen_error(n, D, ridge_lambda, spike_strength, rho, noise_std)
 
-    depth_lambda_dG_dk_heatmap(n, D, spike_strength, rho, noise_std)
-    # print(1./0)
+    # depth_lambda_dG_dk_heatmap(n, D, spike_strength, rho, noise_std)
+    # # print(1./0)
 
-    beta_coeff = 10.
-    lambdas = np.arange(0., 1.001, 0.01)
+    k_l = 10.
+    lambdas = np.arange(0., 1.001, 0.001)
 
     init_biases = np.zeros_like(lambdas)
     init_variances = np.zeros_like(lambdas)
@@ -338,26 +351,30 @@ if __name__ == "__main__":
         init_gen_errors[i] = init_gen_error 
 
         # feat_bias, feat_variance, feat_gen_error = compute_feature_learning_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, noise_std)
-        feat_bias, feat_variance, feat_gen_error = compute_spiked_covariance_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, spike_strength, rho, noise_std)
+        feat_bias, feat_variance, feat_gen_error = compute_spiked_covariance_model_bias_and_variance(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std)
 
         feat_biases[i] = feat_bias
         feat_variances[i] = feat_variance 
         feat_gen_errors[i] = feat_gen_error 
 
     plt.figure()
-    plt.plot(lambdas, init_biases, color='blue', lw=2., linestyle='dashed', label='Bias')
-    plt.plot(lambdas, init_variances, color='blue', lw=2., linestyle='dotted', label='Variance')
-    plt.plot(lambdas, init_gen_errors, color='blue', lw=2.5, label='Generalization Error')
+    plt.plot(lambdas, init_biases, color='gray', lw=2., linestyle='dashed', label='Bias')
+    plt.plot(lambdas, init_variances, color='gray', lw=2., linestyle='dotted', label='Variance')
+    plt.plot(lambdas, init_gen_errors, color='gray', lw=2.5, label='Generalization Error')
 
-    plt.plot(lambdas, feat_biases, color='green', lw=2., linestyle='dashed', label='Bias')
-    plt.plot(lambdas, feat_variances, color='green', lw=2., linestyle='dotted', label='Variance')
-    plt.plot(lambdas, feat_gen_errors, color='green', lw=2.5, label='Generalization Error')
+    plt.plot(lambdas, feat_biases, color='royalblue', lw=2., linestyle='dashed', label='Bias')
+    plt.plot(lambdas, feat_variances, color='royalblue', lw=2., linestyle='dotted', label='Variance')
+    plt.plot(lambdas, feat_gen_errors, color='royalblue', lw=2.5, label='Generalization Error')
+
+    # plot blue and green stars at minimum of generalization error for init and feat learn, respectively
+    plt.scatter(lambdas[np.argmin(init_gen_errors)], np.min(init_gen_errors), color='gray', marker='o', s=50, label='Init Min Gen Error')
+    plt.scatter(lambdas[np.argmin(feat_gen_errors)], np.min(feat_gen_errors), color='royalblue', marker='o', s=50, label='Feat Learn Min Gen Error')
 
     # plt.ylim(0, 0.65)
     plt.xlabel('Ridge Regularization Strength')
     # plt.legend()
-    plt.show()
-    # plt.savefig(f'spiked_covariance_bias_variance_example_q={q:.2f}_noisestd={noise_std}.png')
+    # plt.show()
+    plt.savefig(f'bias_variance_plots/n={n}_D={D}_psi={n/D:.2f}_rho={rho}_gamma={spike_strength}_noise={noise_std}.pdf', bbox_inches='tight')
 
     print(f'Init min gen error: {np.min(init_gen_errors)} at lambda={lambdas[np.argmin(init_gen_errors)]}')
     print(f'Feat learn min gen error: {np.min(feat_gen_errors)} at lambda={lambdas[np.argmin(feat_gen_errors)]}')
