@@ -549,30 +549,30 @@ def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
 
 
 if __name__ == "__main__":
-    compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
-                              gamma_max=20.0, gamma_step=0.1,
-                              snr_max=25.0, snr_step=0.1,
-                              lambda_max=20.0, out_dir="snr_phase_data",
+    # compute_snr_phase_diagram(psi=0.8, sigma=0.03, k_l=10.0,
+    #                           gamma_max=10.0, gamma_step=0.1,
+    #                           snr_max=1111., snr_step=1.,
+    #                           lambda_max=100.0, out_dir="snr_phase_data",
+    #                           save=True, verify=True)
+    compute_snr_phase_diagram(psi=0.2, sigma=1.0, k_l=10.0,
+                              gamma_max=50.0, gamma_step=0.1,
+                              snr_max=1., snr_step=0.01,
+                              lambda_max=500.0, out_dir="snr_phase_data",
                               save=True, verify=True)
-    compute_snr_phase_diagram(psi=0.5, sigma=0.5, k_l=10.0,
-                              gamma_max=10.0, gamma_step=0.1,
-                              snr_max=4.0, snr_step=0.01,
-                              lambda_max=20.0, out_dir="snr_phase_data",
-                              save=True, verify=True)
-    compute_snr_phase_diagram(psi=0.5, sigma=None, k_l=10.0,
-                              gamma_max=20.0, gamma_step=0.1,
-                              snr_max=25.0, snr_step=0.1,
-                              lambda_max=20.0, out_dir="snr_phase_data",
-                              save=True, verify=True, vary_sigma=True, rho=0.5)
-    print(1./0)
+    # compute_snr_phase_diagram(psi=0.5, sigma=None, k_l=10.0,
+    #                           gamma_max=20.0, gamma_step=0.1,
+    #                           snr_max=25.0, snr_step=0.1,
+    #                           lambda_max=20.0, out_dir="snr_phase_data",
+    #                           save=True, verify=True, vary_sigma=True, rho=0.5)
+    # print(1./0)
     gammas = [0., 1., 2., 4., 8., 16., 32., 64.]
     # visualize_mixed_partial_at_zero(psi=0.1, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=None, save=False)
 
     # print(1./0)
-    n = 500
+    n = 100
     D = 1000 
     spike_strength = 10.0
-    rho = 1.
+    rho = 0.3
     noise_std = 0.5
     # ridge_lambda = 0.1
 

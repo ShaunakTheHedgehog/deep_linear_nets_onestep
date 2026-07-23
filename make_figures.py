@@ -700,7 +700,8 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
     cbar = fig.colorbar(pcm, ax=ax, pad=0.02, extend="neither")
     # cbar.set_label(r"$\Delta^\star = \inf_\lambda \mathcal{G}_{\mathrm{feat}}"
     #                r" - \inf_\lambda \mathcal{G}_{\mathrm{init}}$")
-    cbar.set_label("Generalization Error Difference")
+    cbar.ax.tick_params(labelsize=14)
+    cbar.set_label("Generalization Error Difference", fontsize=15)
 
     # --- analytic SNR bound curves ---
     gc = np.linspace(max(gammas.min(), 1e-4), gammas.max(), 2000)
@@ -733,19 +734,25 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
 
     ax.set_xlim(gammas.min(), gammas.max())
     ax.set_ylim(0, snr_max)
-    ax.set_xlabel(r"Spike Strength ($\gamma$)")
-    ax.set_ylabel(r"Signal-to-Noise Ratio ($\rho^2/\sigma^2$)")
+    ax.set_xlabel(r"Spike Strength ($\gamma$)", fontsize=16)
+    ax.set_ylabel(r"Signal-to-Noise Ratio ($\rho^2/\sigma^2$)", fontsize=16)
     ax.grid(False)
+
+    # set tick mark font size
+    ax.tick_params(axis="both", which="major", labelsize=14)
 
     # plot legend in a separate file
 
     handles = []
     if show_upper:
         handles.append(Line2D([0], [0], color="k", lw=2.0, ls="-",
-                       label=r"$U(\gamma)=\dfrac{(1+\gamma\psi)^3}{\gamma(1+\gamma)(1-\psi)^3}$"))
+                       label=r"$\rho^2/\sigma^2 = \dfrac{(1+\gamma\psi)^3}{\gamma(1+\gamma)(1-\psi)^3}$ (lower bound)"))
     handles.append(Line2D([0], [0], color="k", lw=2.0, ls="--",
-                   label=r"$L(\gamma)=\dfrac{1+\gamma\psi^2}{\gamma(1-\psi)^2}$"))
-    handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="////", label="Sufficient SNR Window"))
+                   label=r"$\rho^2/\sigma^2 =\dfrac{1+\gamma\psi^2}{\gamma(1-\psi)^2}$ (upper bound)"))
+    # handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="/-", label="Sufficient SNR Window"))
+    plt.rcParams['hatch.linewidth'] = 0.5
+    handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="/", label="Sufficient SNR Window"))
+
     handles.append(Line2D([0], [0], color="dimgray", lw=2.0, ls="dotted",
                    label="Feature Learning Advantage Threshold"))
     # ax.legend(handles=handles, loc="upper right", frameon=True, framealpha=0.92,
@@ -773,6 +780,53 @@ def plot_all_snr_phase(directory=SNR_PHASE_DIR):
     """Render every SNR phase-diagram dataset found in `directory`."""
     for path in sorted(glob.glob(os.path.join(directory, "snr_phase_*.pkl"))):
         plot_snr_phase_diagram(path)
+
+def plot_all_heatmaps(pkl_path, directory=SNR_PHASE_DIR):
+    pkl_path = os.path.join(directory, pkl_path)
+    with open(pkl_path, "rb") as fh:
+        d = pickle.load(fh)
+
+    gammas = d["gammas"]
+    snrs = d["snrs"]
+    Ginits = d["Ginit"]
+    Gfeats = d["Gfeat"]
+
+    # now plot the heatmaps for G_init and G_feat
+    set_paper_style()
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    pcm1 = axs[0].pcolormesh(gammas, snrs, Ginits, cmap="viridis", shading="gouraud")
+    cbar1 = fig.colorbar(pcm1, ax=axs[0], pad=0.02)
+    cbar1.set_label(r"$G_{\mathrm{init}}$", fontsize=14)
+    axs[0].set_xlabel(r"Spike Strength ($\gamma$)", fontsize=14)
+    axs[0].set_ylabel(r"Signal-to-Noise Ratio ($\rho^2/\sigma^2$)", fontsize=14)
+    axs[0].set_title(r"$G_{\mathrm{init}}$ Heatmap", fontsize=16)
+
+    pcm2 = axs[1].pcolormesh(gammas, snrs, Gfeats, cmap="viridis", shading="gouraud")
+    cbar2 = fig.colorbar(pcm2, ax=axs[1], pad=0.02)
+    cbar2.set_label(r"$G_{\mathrm{feat}}$", fontsize=14)
+    axs[1].set_xlabel(r"Spike Strength ($\gamma$)", fontsize=14)
+    axs[1].set_ylabel(r"Signal-to-Noise Ratio ($\rho^2/\sigma^2$)", fontsize=14)
+    axs[1].set_title(r"$G_{\mathrm{feat}}$ Heatmap", fontsize=16)
+    # use same colorbar scale for both G_init and G_feat heatmaps
+    vmin = min(float(np.nanmin(Ginits)), float(np.nanmin(Gfeats)))
+    vmax = max(float(np.nanmax(Ginits)), float(np.nanmax(Gfeats)))
+    pcm1.set_clim(vmin=vmin, vmax=vmax)
+    pcm2.set_clim(vmin=vmin, vmax=vmax)
+
+    # make a separate plot with symmetric colormap for the difference G_feat - G_init
+    Delta = Gfeats - Ginits
+    M = float(np.nanmax(np.abs(Delta)))
+    norm = mpl.colors.Normalize(vmin=-M, vmax=M)
+    pcm3 = axs[2].pcolormesh(gammas, snrs, Delta, cmap="RdBu_r", norm=norm, shading="gouraud")
+    cbar3 = fig.colorbar(pcm3, ax=axs[2], pad=0.02)
+    cbar3.set_label(r"$\Delta = G_{\mathrm{feat}} - G_{\mathrm{init}}$", fontsize=14)
+    axs[2].set_xlabel(r"Spike Strength ($\gamma$)", fontsize=14)
+    axs[2].set_ylabel(r"Signal-to-Noise Ratio ($\rho^2/\sigma^2$)", fontsize=14)
+    axs[2].set_title(r"$\Delta$ Heatmap", fontsize=16)
+
+    fig.tight_layout()
+    save_stem = "G_init_feat_heatmaps_psi=0.2_sigma=1_kl=10"
+    _savefig(fig, save_stem)
 
 
 # ---- io --------------------------------------------------------------------
