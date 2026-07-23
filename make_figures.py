@@ -683,7 +683,12 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
         d = pickle.load(fh)
 
     gammas, snrs, Delta = d["gammas"], d["snrs"], d["Delta"]
-    psi, sigma, k_l = d["psi"], d["sigma"], d["k_l"]
+    psi, k_l = d["psi"], d["k_l"]
+    vary_sigma = d["vary_sigma"]
+    sigma = d["sigma"]
+    rho = d["rho"]
+    fixed_tag = f'sigma={sigma:g}' if not vary_sigma else f'rho={rho:g}'
+
     snr_max = float(snrs.max())
 
     # symmetric scale: white at 0, equal extent on both sides (no distortion)
@@ -693,8 +698,9 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
     fig, ax = plt.subplots(figsize=(6.6, 5.2))
     pcm = ax.pcolormesh(gammas, snrs, Delta, cmap=cmap, norm=norm, shading="gouraud")
     cbar = fig.colorbar(pcm, ax=ax, pad=0.02, extend="neither")
-    cbar.set_label(r"$\Delta^\star = \inf_\lambda \mathcal{G}_{\mathrm{feat}}"
-                   r" - \inf_\lambda \mathcal{G}_{\mathrm{init}}$")
+    # cbar.set_label(r"$\Delta^\star = \inf_\lambda \mathcal{G}_{\mathrm{feat}}"
+    #                r" - \inf_\lambda \mathcal{G}_{\mathrm{init}}$")
+    cbar.set_label("Generalization Error Difference")
 
     # --- analytic SNR bound curves ---
     gc = np.linspace(max(gammas.min(), 1e-4), gammas.max(), 2000)
@@ -727,9 +733,11 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
 
     ax.set_xlim(gammas.min(), gammas.max())
     ax.set_ylim(0, snr_max)
-    ax.set_xlabel(r"spike strength $\gamma$")
-    ax.set_ylabel(r"$\rho^2/\sigma^2$")
+    ax.set_xlabel(r"Spike Strength ($\gamma$)")
+    ax.set_ylabel(r"Signal-to-Noise Ratio ($\rho^2/\sigma^2$)")
     ax.grid(False)
+
+    # plot legend in a separate file
 
     handles = []
     if show_upper:
@@ -737,17 +745,25 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
                        label=r"$U(\gamma)=\dfrac{(1+\gamma\psi)^3}{\gamma(1+\gamma)(1-\psi)^3}$"))
     handles.append(Line2D([0], [0], color="k", lw=2.0, ls="--",
                    label=r"$L(\gamma)=\dfrac{1+\gamma\psi^2}{\gamma(1-\psi)^2}$"))
-    handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="////", label="SNR window"))
-    ax.legend(handles=handles, loc="upper right", frameon=True, framealpha=0.92,
-              edgecolor="0.7", fontsize=10)
+    handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="////", label="Sufficient SNR Window"))
+    handles.append(Line2D([0], [0], color="dimgray", lw=2.0, ls="dotted",
+                   label="Feature Learning Advantage Threshold"))
+    # ax.legend(handles=handles, loc="upper right", frameon=True, framealpha=0.92,
+    #           edgecolor="0.7", fontsize=10)
+    # make separate file
+    fig_legend = plt.figure(figsize=(5.2, 1.8))
+    fig_legend.legend(handles=handles, loc="center", frameon=True, framealpha=0.92,
+                      edgecolor="0.7", fontsize=10)
+    _savefig(fig_legend, f"snr_phase_legend")
+    plt.close(fig_legend)
 
-    caption = (rf"$\psi={psi:g}$, $\sigma={sigma:g}$, $k_\ell={k_l:g}$. "
-               rf"Blue: feature learning lowers optimal error; red: it raises it.")
-    fig.text(0.5, -0.02, caption, ha="center", va="top", fontsize=8.5, color="0.25")
+    # caption = (rf"$\psi={psi:g}$, $\{fixed_tag}$, $k_\ell={k_l:g}$. "
+    #            rf"Blue: feature learning lowers optimal error; red: it raises it.")
+    # fig.text(0.5, -0.02, caption, ha="center", va="top", fontsize=8.5, color="0.25")
 
     fig.tight_layout()
     if save_stem is None:
-        save_stem = f"snr_phase_psi={psi:g}_sigma={sigma:g}_kl={k_l:g}"
+        save_stem = f"snr_phase_psi={psi:g}_{fixed_tag}_kl={k_l:g}"
     _savefig(fig, save_stem)
     plt.close(fig)
     return os.path.join(OUT_DIR, f"{save_stem}.pdf")

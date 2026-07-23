@@ -397,8 +397,8 @@ def _convert_u_to_lambda(u):
     return u / (1. - u)
 
 
-def min_gen_error_over_lambda(psi, gamma, rho, sigma, k_l,
-                              lambda_max=15.0, n_coarse=151, max_extend=5):
+def min_gen_error_over_lambda(psi, gamma, rho, sigma, k_l):
+                              # lambda_max=15.0, n_coarse=151, max_extend=5):
     """
     Robustly minimize the asymptotic generalization error over lambda >= 0.
 
@@ -437,7 +437,7 @@ def min_gen_error_over_lambda(psi, gamma, rho, sigma, k_l,
     return G_best, lam_best
 
 
-def _verify_min_finder(psi, sigma, k_l, cells, lambda_max, n_dense=5000, rng_seed=0):
+def _verify_min_finder_varying_rho(psi, sigma, k_l, cells, lambda_max, n_dense=5000, rng_seed=0):
     """
     Sanity check: on a random subset of (gamma, rho) cells, recompute the min
     over lambda with an ultra-dense grid and compare to min_gen_error_over_lambda.
@@ -448,8 +448,25 @@ def _verify_min_finder(psi, sigma, k_l, cells, lambda_max, n_dense=5000, rng_see
     worst = 0.0
     for gamma, rho in picks:
         for kl in (0.0, k_l):
-            G_fast, _ = min_gen_error_over_lambda(psi, gamma, rho, sigma, kl, lambda_max)
+            G_fast, _ = min_gen_error_over_lambda(psi, gamma, rho, sigma, kl) #, lambda_max)
             dense = np.linspace(0.0, lambda_max, n_dense)
+            G_dense = min(_gen_error_at_lambda(l, psi, gamma, rho, sigma, kl) for l in dense)
+            worst = max(worst, abs(G_fast - G_dense))
+    return worst
+
+def _verify_min_finder_varying_sigma(psi, rho, k_l, cells, lambda_max, n_dense=10_000, rng_seed=0):
+    """
+    Sanity check: on a random subset of (gamma, sigma) cells, recompute the min
+    over lambda with an ultra-dense grid and compare to min_gen_error_over_lambda.
+    Returns the worst absolute discrepancy found.
+    """
+    rng = np.random.default_rng(rng_seed)
+    picks = cells[rng.choice(len(cells), size=min(len(cells), 150), replace=False)]
+    worst = 0.0
+    for gamma, sigma in picks:
+        for kl in (0.0, k_l):
+            G_fast, _ = min_gen_error_over_lambda(psi, gamma, rho, sigma, kl) #, lambda_max)
+            dense = np.linspace(0.0, lambda_max * (1. + sigma**2), n_dense * int(1 + sigma**2))
             G_dense = min(_gen_error_at_lambda(l, psi, gamma, rho, sigma, kl) for l in dense)
             worst = max(worst, abs(G_fast - G_dense))
     return worst
@@ -458,8 +475,8 @@ def _verify_min_finder(psi, sigma, k_l, cells, lambda_max, n_dense=5000, rng_see
 def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
                               gamma_max=20.0, gamma_step=0.1,
                               snr_max=25.0, snr_step=0.1,
-                              lambda_max=15.0, out_dir="snr_phase_data",
-                              save=True, verify=True):
+                              lambda_max=20.0, out_dir="snr_phase_data",
+                              save=True, verify=True, rho=None, vary_sigma=False):
     """
     Build the phase diagram of Delta* = min_lambda G_feat - min_lambda G_init.
 
@@ -469,18 +486,34 @@ def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
     """
     gammas = np.round(np.arange(0.0, gamma_max + 1e-9, gamma_step), 6)
     snrs = np.round(np.arange(0.0, snr_max + 1e-9, snr_step), 6)
+    fixed_tag = f'sigma={sigma:g}' if not vary_sigma else f'rho={rho:g}'
+    if vary_sigma:
+        assert sigma is None, "sigma must be None if vary_sigma is True"
+        assert rho is not None, "rho must be provided if vary_sigma is True"
+        snrs = np.round(np.arange(snr_step, snr_max + 1e-9, snr_step), 6)
+        snrs = np.concatenate((np.array([snr_step/10.]), snrs))
+    else:
+        assert rho is None, "rho must be None if vary_sigma is False"
+        assert sigma is not None, "sigma must be provided if vary_sigma is False"
 
     Delta = np.full((len(snrs), len(gammas)), np.nan)
     Gfeat = np.full_like(Delta, np.nan)
     Ginit = np.full_like(Delta, np.nan)
 
-    print(f"[snr phase] psi={psi} sigma={sigma} k_l={k_l} | "
+    print(f"[snr phase] psi={psi} {fixed_tag} k_l={k_l} | "
           f"{len(gammas)} gammas x {len(snrs)} snr rows", flush=True)
     for i, snr in enumerate(snrs):
-        rho = min(sigma * np.sqrt(snr), 1.0)   # rho^2/sigma^2 = snr
+        curr_rho, curr_sigma = rho, sigma
+        if vary_sigma:
+            curr_sigma = np.sqrt(curr_rho**2 / snr)
+        else:
+            curr_rho = curr_sigma * np.sqrt(snr)
+            assert curr_rho <= 1.0 
+        # rho = min(curr_sigma * np.sqrt(snr), 1.0)   # rho^2/sigma^2 = snr
+
         for j, g in enumerate(gammas):
-            Gf, _ = min_gen_error_over_lambda(psi, g, rho, sigma, k_l, lambda_max)
-            Gi, _ = min_gen_error_over_lambda(psi, g, rho, sigma, 0.0, lambda_max)
+            Gf, _ = min_gen_error_over_lambda(psi, g, curr_rho, curr_sigma, k_l)
+            Gi, _ = min_gen_error_over_lambda(psi, g, curr_rho, curr_sigma, 0.0)
             Gfeat[i, j] = Gf
             Ginit[i, j] = Gi
             Delta[i, j] = Gf - Gi
@@ -488,20 +521,25 @@ def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
             print(f"  row {i+1}/{len(snrs)} (snr={snr:g})", flush=True)
 
     worst = None
-    if verify:
+    if verify and not vary_sigma:
         cells = np.array([(g, min(sigma * np.sqrt(s), 1.0)) for s in snrs for g in gammas])
-        worst = _verify_min_finder(psi, sigma, k_l, cells, lambda_max)
+        worst = _verify_min_finder_varying_rho(psi, sigma, k_l, cells, lambda_max)
+        print(f"[snr phase] verification: worst |fast-dense| min discrepancy = {worst:.2e}",
+              flush=True)
+    if verify and vary_sigma:
+        cells = np.array([(g, np.sqrt(rho**2 / s)) for s in snrs for g in gammas])
+        worst = _verify_min_finder_varying_sigma(psi, curr_rho, k_l, cells, lambda_max)
         print(f"[snr phase] verification: worst |fast-dense| min discrepancy = {worst:.2e}",
               flush=True)
 
     results = dict(
         kind="snr_phase_diagram", psi=psi, sigma=sigma, k_l=k_l,
         gammas=gammas, snrs=snrs, Delta=Delta, Gfeat=Gfeat, Ginit=Ginit,
-        lambda_max=lambda_max, verify_worst=worst,
+        lambda_max=lambda_max, verify_worst=worst, vary_sigma=vary_sigma, rho=rho,
     )
     if save:
         os.makedirs(out_dir, exist_ok=True)
-        fname = (f"snr_phase_psi={psi:g}_sigma={sigma:g}_kl={k_l:g}"
+        fname = (f"snr_phase_psi={psi:g}_{fixed_tag}_kl={k_l:g}"
                  f"_gmax={gamma_max:g}_snrmax={snr_max:g}.pkl")
         path = os.path.join(out_dir, fname)
         with open(path, "wb") as f:
@@ -511,6 +549,22 @@ def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
 
 
 if __name__ == "__main__":
+    compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
+                              gamma_max=20.0, gamma_step=0.1,
+                              snr_max=25.0, snr_step=0.1,
+                              lambda_max=20.0, out_dir="snr_phase_data",
+                              save=True, verify=True)
+    compute_snr_phase_diagram(psi=0.5, sigma=0.5, k_l=10.0,
+                              gamma_max=10.0, gamma_step=0.1,
+                              snr_max=4.0, snr_step=0.01,
+                              lambda_max=20.0, out_dir="snr_phase_data",
+                              save=True, verify=True)
+    compute_snr_phase_diagram(psi=0.5, sigma=None, k_l=10.0,
+                              gamma_max=20.0, gamma_step=0.1,
+                              snr_max=25.0, snr_step=0.1,
+                              lambda_max=20.0, out_dir="snr_phase_data",
+                              save=True, verify=True, vary_sigma=True, rho=0.5)
+    print(1./0)
     gammas = [0., 1., 2., 4., 8., 16., 32., 64.]
     # visualize_mixed_partial_at_zero(psi=0.1, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=None, save=False)
 
