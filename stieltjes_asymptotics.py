@@ -244,6 +244,68 @@ def dG_dlambda_dk_at_zero(psi, gamma, rho, noise_std):
     return dG_dlambda_dk
 
 
+def visualize_mixed_partial_at_zero(psi, gammas, rhos, noise_stds, ylim=None):
+    '''
+    Visualizes the mixed partial derivative of the generalization error with respect to k_l and lambda
+    at k_l = 0 and lambda = 0 for the spiked covariance model.
+    Arguments:
+        psi: ratio of n/D
+        gamma: list of spike strengths
+        rhos: array of alignment values, or a single float
+        noise_stds: array of noise standard deviations, or a single float
+    '''
+    # add description
+    
+    # assert that either rhos and noise_stds are 1d arrays of the same length OR one of them is a float scalar
+    assert (isinstance(rhos, (float, int)) or isinstance(noise_stds, (float, int)) or (len(rhos) == len(noise_stds)))
+
+    # assert that noise_stds has no zero values 
+    assert np.all(noise_stds > 0), "noise_stds must be greater than 0"
+
+    SNRs = rhos**2 / noise_stds**2
+
+    # sample colors from a nice smooth colormap for gammas
+    colors = plt.cm.viridis(np.linspace(0, 1, len(gammas)))
+
+    # make a beautiful, paper-ready ML theory style plot of SNRs against dG_dlambda_dks
+    # make the plot grid style white, with grid lines in light gray, and the axes spines in black
+    # make sure to label the point where each curve crosses the x-axis
+    fig, ax = plt.subplots(figsize=(8, 6.5))
+    ax.set_facecolor('white')
+    ax.grid(True, color='lightgray', linestyle='--')
+    ax.spines['bottom'].set_color('black')
+    ax.spines['left'].set_color('black')
+    ax.spines['top'].set_color('black')
+    ax.spines['right'].set_color('black')
+    for i, gamma in enumerate(gammas):
+        dG_dlambda_dks = dG_dlambda_dk_at_zero(psi, gamma, rhos, noise_stds)
+        ax.plot(SNRs, dG_dlambda_dks, linestyle='-', color=colors[i], lw=2.5, label=f'$\\gamma$={gamma:g}')
+        # find point where dG_dlambda_dks crosses the x-axis and mark it with a dot
+        if np.any(dG_dlambda_dks < 0):
+            crossing_index = np.where(dG_dlambda_dks < 0)[0][0]
+            ax.scatter(SNRs[crossing_index], dG_dlambda_dks[crossing_index], color=colors[i], s=50, zorder=5)
+    crit_SNR = psi**2 / (1 - psi)**2
+    ax.axvline(crit_SNR, color='black', linestyle='dotted', lw=1.5)
+    ax.axhline(0, color='gray', linestyle='--', lw=1.5)
+
+    # shade the negative y-axis region in light blue, and the positive y-axis region in light red
+    ax.fill_between(SNRs, dG_dlambda_dks.min()-0.5, 0, color='lightblue', alpha=0.2)
+    ax.fill_between(SNRs, 0, dG_dlambda_dks.max()+0.5, color='lightcoral', alpha=0.2)
+
+    ax.set_xlabel('Signal-to-Noise Ratio $\\left( \\rho^2/\\sigma^2\\right)$', fontsize=16)
+    ax.set_ylabel('$\\left. \\frac{\\partial^2 G}{\\partial k_\\ell \\partial \\lambda} \\right|_{k_\\ell=0, \\lambda=0}$', fontsize=22)
+    ax.set_title(f'Local Feature Learning Advantage \nEmerges above a Critical SNR', fontsize=17)
+    # increase tick font size
+    ax.tick_params(axis='both', which='major', labelsize=16)
+    # make legend have 2 rows
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, fontsize=14, title='Spike Strength $\\gamma$', title_fontsize=14, ncol=2)
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    ax.set_xlim(SNRs.min(), SNRs.max())
+    plt.savefig(f"paper_figures/feature_learning_advantage_psi={psi:g}.pdf", bbox_inches='tight')
+
+
 def depth_lambda_dG_dk_heatmap(n, D, spike_strength, rho, noise_std):
     q = D / n
     lambdas = np.arange(0, 1.01, 0.01)
@@ -305,6 +367,10 @@ def generate_gen_error_advantage_curve():
 
 
 if __name__ == "__main__":
+    gammas = [0., 1., 2., 4., 8., 16., 32., 64.]
+    visualize_mixed_partial_at_zero(psi=0.5, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=(-2.5, 2.5))
+
+    print(1./0)
     n = 500
     D = 1000 
     spike_strength = 5.0
