@@ -36,6 +36,7 @@ SWEEP_DIR = os.path.join(HERE, "new_spiked_sweep")                  # clean para
 SPIKED_DIR = os.path.join(HERE, "spiked_covariance_experiments")  # legacy runs
 CLAMBDA_DIR = os.path.join(HERE, "c_lambda_data")                 # c_lambda study data
 BV_DIR = os.path.join(HERE, "bias_variance_data")                 # bias/variance study data
+SNR_PHASE_DIR = os.path.join(HERE, "snr_phase_data")             # SNR phase-diagram data
 OUT_DIR = os.path.join(HERE, "paper_figures")
 
 # ---- colour / style semantics (consistent across every figure) -------------
@@ -663,6 +664,101 @@ def plot_all_bias_variance(directory=BV_DIR, mark_every_lambda=0.1):
     save_bias_variance_legend()
 
 
+# ---- SNR phase diagram: Delta* over (gamma, rho^2/sigma^2) ------------------
+def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=None):
+    """
+    Heatmap of Delta* = inf_lambda G_feat - inf_lambda G_init over
+    (gamma, rho^2/sigma^2). Diverging colormap on a SYMMETRIC linear scale
+    (white exactly at 0, blue negative, red positive, equal both sides).
+
+    Overlays the analytic SNR bound curves. With show_upper=True the window is
+    hatched between the lower and upper curves. With show_upper=False (e.g. when
+    the upper bound sits above the plotted rho^2/sigma^2 cap) only the lower curve
+    is drawn and the whole region above it is hatched.
+    """
+    from matplotlib.patches import Patch
+
+    set_paper_style()
+    with open(pkl_path, "rb") as fh:
+        d = pickle.load(fh)
+
+    gammas, snrs, Delta = d["gammas"], d["snrs"], d["Delta"]
+    psi, sigma, k_l = d["psi"], d["sigma"], d["k_l"]
+    snr_max = float(snrs.max())
+
+    # symmetric scale: white at 0, equal extent on both sides (no distortion)
+    M = float(np.nanmax(np.abs(Delta)))
+    norm = mpl.colors.Normalize(vmin=-M, vmax=M)
+
+    fig, ax = plt.subplots(figsize=(6.6, 5.2))
+    pcm = ax.pcolormesh(gammas, snrs, Delta, cmap=cmap, norm=norm, shading="gouraud")
+    cbar = fig.colorbar(pcm, ax=ax, pad=0.02, extend="neither")
+    cbar.set_label(r"$\Delta^\star = \inf_\lambda \mathcal{G}_{\mathrm{feat}}"
+                   r" - \inf_\lambda \mathcal{G}_{\mathrm{init}}$")
+
+    # --- analytic SNR bound curves ---
+    gc = np.linspace(max(gammas.min(), 1e-4), gammas.max(), 2000)
+    upper = (1 + gc * psi) ** 3 / (gc * (1 + gc) * (1 - psi) ** 3)
+    lower = (1 + gc * psi**2) / (gc * (1 - psi) ** 2)      # L_glob (corrected)
+    lower_plot = np.where(lower <= snr_max, lower, np.nan)
+
+    # find all gamma, SNR pairs where the difference is approximately zero and mark each of them with a small black dot
+    # This is to highlight the boundary where feature learning neither helps nor hurts
+    ax.contour(gammas, snrs, Delta, levels=[0], colors="dimgray", linewidths=1.5, linestyles="dotted", zorder=6)
+
+    # hatched "SNR window" (heatmap stays visible: facecolor none).
+    # show_upper: hatch between L and U. Otherwise U is above the cap, so the
+    # visible window is everything above L up to the top edge.
+    lo_c = np.clip(lower, 0, snr_max)
+    if show_upper:
+        window_top = np.clip(upper, 0, snr_max)
+        top_mask = np.isfinite(upper) & (upper > lower)
+    else:
+        window_top = np.full_like(gc, snr_max)
+        top_mask = np.ones_like(gc, dtype=bool)
+    mask = np.isfinite(lower) & (lower < snr_max) & top_mask
+    ax.fill_between(gc, lo_c, window_top, where=mask, facecolor="none",
+                    edgecolor="0.15", hatch="////", linewidth=0.0, zorder=4)
+
+    if show_upper:
+        ax.plot(gc, np.where(upper <= snr_max, upper, np.nan),
+                color="k", lw=2.0, ls="-", zorder=5)
+    ax.plot(gc, lower_plot, color="k", lw=2.0, ls="--", zorder=5)
+
+    ax.set_xlim(gammas.min(), gammas.max())
+    ax.set_ylim(0, snr_max)
+    ax.set_xlabel(r"spike strength $\gamma$")
+    ax.set_ylabel(r"$\rho^2/\sigma^2$")
+    ax.grid(False)
+
+    handles = []
+    if show_upper:
+        handles.append(Line2D([0], [0], color="k", lw=2.0, ls="-",
+                       label=r"$U(\gamma)=\dfrac{(1+\gamma\psi)^3}{\gamma(1+\gamma)(1-\psi)^3}$"))
+    handles.append(Line2D([0], [0], color="k", lw=2.0, ls="--",
+                   label=r"$L(\gamma)=\dfrac{1+\gamma\psi^2}{\gamma(1-\psi)^2}$"))
+    handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="////", label="SNR window"))
+    ax.legend(handles=handles, loc="upper right", frameon=True, framealpha=0.92,
+              edgecolor="0.7", fontsize=10)
+
+    caption = (rf"$\psi={psi:g}$, $\sigma={sigma:g}$, $k_\ell={k_l:g}$. "
+               rf"Blue: feature learning lowers optimal error; red: it raises it.")
+    fig.text(0.5, -0.02, caption, ha="center", va="top", fontsize=8.5, color="0.25")
+
+    fig.tight_layout()
+    if save_stem is None:
+        save_stem = f"snr_phase_psi={psi:g}_sigma={sigma:g}_kl={k_l:g}"
+    _savefig(fig, save_stem)
+    plt.close(fig)
+    return os.path.join(OUT_DIR, f"{save_stem}.pdf")
+
+
+def plot_all_snr_phase(directory=SNR_PHASE_DIR):
+    """Render every SNR phase-diagram dataset found in `directory`."""
+    for path in sorted(glob.glob(os.path.join(directory, "snr_phase_*.pkl"))):
+        plot_snr_phase_diagram(path)
+
+
 # ---- io --------------------------------------------------------------------
 def _savefig(fig, stem):
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -672,5 +768,6 @@ def _savefig(fig, stem):
 
 
 if __name__ == "__main__":
-    plot_f1_grid()
-    plot_isotropic()
+    # plot_f1_grid()
+    # plot_isotropic()
+    plot_all_snr_phase()

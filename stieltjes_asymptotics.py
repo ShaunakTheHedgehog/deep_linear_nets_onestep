@@ -1,5 +1,9 @@
+import os
+import pickle as pkl
+
 import numpy as np
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
+from scipy.optimize import minimize_scalar
 
 NUMERICAL_TOLERANCE = 1e-6
 
@@ -244,7 +248,7 @@ def dG_dlambda_dk_at_zero(psi, gamma, rho, noise_std):
     return dG_dlambda_dk
 
 
-def visualize_mixed_partial_at_zero(psi, gammas, rhos, noise_stds, ylim=None):
+def visualize_mixed_partial_at_zero(psi, gammas, rhos, noise_stds, ylim=None, save=False):
     '''
     Visualizes the mixed partial derivative of the generalization error with respect to k_l and lambda
     at k_l = 0 and lambda = 0 for the spiked covariance model.
@@ -303,7 +307,10 @@ def visualize_mixed_partial_at_zero(psi, gammas, rhos, noise_stds, ylim=None):
     if ylim is not None:
         ax.set_ylim(ylim)
     ax.set_xlim(SNRs.min(), SNRs.max())
-    plt.savefig(f"paper_figures/feature_learning_advantage_psi={psi:g}.pdf", bbox_inches='tight')
+    if save:
+        plt.savefig(f"paper_figures/feature_learning_advantage_psi={psi:g}.pdf", bbox_inches='tight')
+    else:
+        plt.show()
 
 
 def depth_lambda_dG_dk_heatmap(n, D, spike_strength, rho, noise_std):
@@ -363,18 +370,155 @@ def explore_depth_effect_on_gen_error(n, D, ridge_lambda, spike_strength, rho, n
 
 def generate_gen_error_advantage_curve():
     return
-    
+
+
+# ---------------------------------------------------------------------------
+# SNR phase diagram: Delta* = min_lambda G_feat - min_lambda G_init over (gamma, rho^2/sigma^2)
+# ---------------------------------------------------------------------------
+def _gen_error_at_lambda(ridge_lambda, psi, gamma, rho, sigma, k_l):
+    """Asymptotic generalization error at a single ridge lambda (only psi matters)."""
+    D_ref = 1000.0
+    n_ref = psi * D_ref
+    _, _, G = compute_spiked_covariance_model_bias_and_variance(
+        n_ref, D_ref, k_l, ridge_lambda, gamma, rho, sigma)
+    return float(G)
+
+def _gen_error_at_lambda_with_u(u, psi, gamma, rho, sigma, k_l):
+    ridge_lambda = _convert_u_to_lambda(u)
+    return _gen_error_at_lambda(ridge_lambda, psi, gamma, rho, sigma, k_l)
+
+
+def _convert_lambda_to_u(ridge_lambda):
+    """Convert ridge lambda to u = lambda / (1 + lambda) in [0, 1)."""
+    return ridge_lambda / (1. + ridge_lambda)
+
+def _convert_u_to_lambda(u):
+    """Convert u = lambda / (1 + lambda) in [0, 1) to ridge lambda."""
+    return u / (1. - u)
+
+
+def min_gen_error_over_lambda(psi, gamma, rho, sigma, k_l,
+                              lambda_max=15.0, n_coarse=151, max_extend=5):
+    """
+    Robustly minimize the asymptotic generalization error over lambda >= 0.
+
+    Strategy: (1) coarse grid over [0, lambda_max] to globally bracket the min
+    (guards against multimodality); (2) if the coarse argmin sits on the upper
+    boundary, double lambda_max and retry (never miss a min beyond the range);
+    (3) refine within the winning bracket via a bounded scalar optimizer.
+
+    Returns (G_min, lambda_star).
+    """
+    # lam_hi = float(lambda_max)
+    # grid = Gs = idx = None
+    # for _ in range(max_extend):
+    #     grid = np.linspace(0.0, lam_hi, n_coarse)
+    #     Gs = np.array([_gen_error_at_lambda(l, psi, gamma, rho, sigma, k_l) for l in grid])
+    #     idx = int(np.argmin(Gs))
+    #     if idx < len(grid) - 1:
+    #         break
+    #     lam_hi *= 2.0   # min at the top boundary -> extend and retry
+
+    # lo = grid[max(idx - 1, 0)]
+    # hi = grid[min(idx + 1, len(grid) - 1)]
+    # G_best, lam_best = float(Gs[idx]), float(grid[idx])
+    # if hi > lo:
+    #     res = minimize_scalar(
+    #         _gen_error_at_lambda, bounds=(lo, hi), method="bounded",
+    #         args=(psi, gamma, rho, sigma, k_l), options={"xatol": 1e-7})
+    #     if float(res.fun) <= G_best:
+    #         G_best, lam_best = float(res.fun), float(res.x)
+    u_bounds = (0., 1.)
+    res = minimize_scalar(
+            _gen_error_at_lambda_with_u, bounds=u_bounds, method="bounded",
+            args=(psi, gamma, rho, sigma, k_l), options={"xatol": 1e-7})
+    G_best, u_best = float(res.fun), float(res.x)
+    lam_best = _convert_u_to_lambda(u_best)
+    return G_best, lam_best
+
+
+def _verify_min_finder(psi, sigma, k_l, cells, lambda_max, n_dense=5000, rng_seed=0):
+    """
+    Sanity check: on a random subset of (gamma, rho) cells, recompute the min
+    over lambda with an ultra-dense grid and compare to min_gen_error_over_lambda.
+    Returns the worst absolute discrepancy found.
+    """
+    rng = np.random.default_rng(rng_seed)
+    picks = cells[rng.choice(len(cells), size=min(len(cells), 150), replace=False)]
+    worst = 0.0
+    for gamma, rho in picks:
+        for kl in (0.0, k_l):
+            G_fast, _ = min_gen_error_over_lambda(psi, gamma, rho, sigma, kl, lambda_max)
+            dense = np.linspace(0.0, lambda_max, n_dense)
+            G_dense = min(_gen_error_at_lambda(l, psi, gamma, rho, sigma, kl) for l in dense)
+            worst = max(worst, abs(G_fast - G_dense))
+    return worst
+
+
+def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
+                              gamma_max=20.0, gamma_step=0.1,
+                              snr_max=25.0, snr_step=0.1,
+                              lambda_max=15.0, out_dir="snr_phase_data",
+                              save=True, verify=True):
+    """
+    Build the phase diagram of Delta* = min_lambda G_feat - min_lambda G_init.
+
+    x-axis: gamma in [0, gamma_max]. y-axis: rho^2/sigma^2 in [0, snr_max],
+    sampled UNIFORMLY (rho = sigma * sqrt(snr), clipped to [0, 1]). For each cell,
+    G_feat uses k_l and G_init uses k_l = 0, each minimized over lambda >= 0.
+    """
+    gammas = np.round(np.arange(0.0, gamma_max + 1e-9, gamma_step), 6)
+    snrs = np.round(np.arange(0.0, snr_max + 1e-9, snr_step), 6)
+
+    Delta = np.full((len(snrs), len(gammas)), np.nan)
+    Gfeat = np.full_like(Delta, np.nan)
+    Ginit = np.full_like(Delta, np.nan)
+
+    print(f"[snr phase] psi={psi} sigma={sigma} k_l={k_l} | "
+          f"{len(gammas)} gammas x {len(snrs)} snr rows", flush=True)
+    for i, snr in enumerate(snrs):
+        rho = min(sigma * np.sqrt(snr), 1.0)   # rho^2/sigma^2 = snr
+        for j, g in enumerate(gammas):
+            Gf, _ = min_gen_error_over_lambda(psi, g, rho, sigma, k_l, lambda_max)
+            Gi, _ = min_gen_error_over_lambda(psi, g, rho, sigma, 0.0, lambda_max)
+            Gfeat[i, j] = Gf
+            Ginit[i, j] = Gi
+            Delta[i, j] = Gf - Gi
+        if i % 25 == 0:
+            print(f"  row {i+1}/{len(snrs)} (snr={snr:g})", flush=True)
+
+    worst = None
+    if verify:
+        cells = np.array([(g, min(sigma * np.sqrt(s), 1.0)) for s in snrs for g in gammas])
+        worst = _verify_min_finder(psi, sigma, k_l, cells, lambda_max)
+        print(f"[snr phase] verification: worst |fast-dense| min discrepancy = {worst:.2e}",
+              flush=True)
+
+    results = dict(
+        kind="snr_phase_diagram", psi=psi, sigma=sigma, k_l=k_l,
+        gammas=gammas, snrs=snrs, Delta=Delta, Gfeat=Gfeat, Ginit=Ginit,
+        lambda_max=lambda_max, verify_worst=worst,
+    )
+    if save:
+        os.makedirs(out_dir, exist_ok=True)
+        fname = (f"snr_phase_psi={psi:g}_sigma={sigma:g}_kl={k_l:g}"
+                 f"_gmax={gamma_max:g}_snrmax={snr_max:g}.pkl")
+        path = os.path.join(out_dir, fname)
+        with open(path, "wb") as f:
+            pkl.dump(results, f)
+        print(f"[snr phase] saved -> {path}", flush=True)
+    return results
 
 
 if __name__ == "__main__":
     gammas = [0., 1., 2., 4., 8., 16., 32., 64.]
-    visualize_mixed_partial_at_zero(psi=0.5, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=(-2.5, 2.5))
+    # visualize_mixed_partial_at_zero(psi=0.1, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=None, save=False)
 
-    print(1./0)
+    # print(1./0)
     n = 500
     D = 1000 
-    spike_strength = 5.0
-    rho = 0.5
+    spike_strength = 10.0
+    rho = 1.
     noise_std = 0.5
     # ridge_lambda = 0.1
 
@@ -396,7 +540,7 @@ if __name__ == "__main__":
     # # print(1./0)
 
     k_l = 10.
-    lambdas = np.arange(0., 1.001, 0.001)
+    lambdas = np.arange(0., 10000, 100.)
 
     init_biases = np.zeros_like(lambdas)
     init_variances = np.zeros_like(lambdas)
@@ -424,12 +568,12 @@ if __name__ == "__main__":
         feat_gen_errors[i] = feat_gen_error 
 
     plt.figure()
-    plt.plot(lambdas, init_biases, color='gray', lw=2., linestyle='dashed', label='Bias')
-    plt.plot(lambdas, init_variances, color='gray', lw=2., linestyle='dotted', label='Variance')
+    # plt.plot(lambdas, init_biases, color='gray', lw=2., linestyle='dashed', label='Bias')
+    # plt.plot(lambdas, init_variances, color='gray', lw=2., linestyle='dotted', label='Variance')
     plt.plot(lambdas, init_gen_errors, color='gray', lw=2.5, label='Generalization Error')
 
-    plt.plot(lambdas, feat_biases, color='royalblue', lw=2., linestyle='dashed', label='Bias')
-    plt.plot(lambdas, feat_variances, color='royalblue', lw=2., linestyle='dotted', label='Variance')
+    # plt.plot(lambdas, feat_biases, color='royalblue', lw=2., linestyle='dashed', label='Bias')
+    # plt.plot(lambdas, feat_variances, color='royalblue', lw=2., linestyle='dotted', label='Variance')
     plt.plot(lambdas, feat_gen_errors, color='royalblue', lw=2.5, label='Generalization Error')
 
     # plot blue and green stars at minimum of generalization error for init and feat learn, respectively
@@ -439,8 +583,8 @@ if __name__ == "__main__":
     # plt.ylim(0, 0.65)
     plt.xlabel('Ridge Regularization Strength')
     # plt.legend()
-    # plt.show()
-    plt.savefig(f'bias_variance_plots/n={n}_D={D}_psi={n/D:.2f}_rho={rho}_gamma={spike_strength}_noise={noise_std}.pdf', bbox_inches='tight')
+    plt.show()
+    # plt.savefig(f'bias_variance_plots/n={n}_D={D}_psi={n/D:.2f}_rho={rho}_gamma={spike_strength}_noise={noise_std}.pdf', bbox_inches='tight')
 
     print(f'Init min gen error: {np.min(init_gen_errors)} at lambda={lambdas[np.argmin(init_gen_errors)]}')
     print(f'Feat learn min gen error: {np.min(feat_gen_errors)} at lambda={lambdas[np.argmin(feat_gen_errors)]}')
