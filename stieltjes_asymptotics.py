@@ -549,16 +549,21 @@ def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
 
 
 if __name__ == "__main__":
+    print(min_gen_error_over_lambda(0.2, 10, 0.5, 1., 10.))
+    print(min_gen_error_over_lambda(0.2, 15, 0.1, 1., 10.))
+    print(min_gen_error_over_lambda(0.2, 0.25, 0.8, 1., 10.))
+    # print(1./0)
+
     # compute_snr_phase_diagram(psi=0.8, sigma=0.03, k_l=10.0,
     #                           gamma_max=10.0, gamma_step=0.1,
     #                           snr_max=1111., snr_step=1.,
     #                           lambda_max=100.0, out_dir="snr_phase_data",
     #                           save=True, verify=True)
-    compute_snr_phase_diagram(psi=0.2, sigma=1.0, k_l=10.0,
-                              gamma_max=50.0, gamma_step=0.1,
-                              snr_max=1., snr_step=0.01,
-                              lambda_max=500.0, out_dir="snr_phase_data",
-                              save=True, verify=True)
+    # compute_snr_phase_diagram(psi=0.2, sigma=1.0, k_l=10.0,
+    #                           gamma_max=50.0, gamma_step=0.1,
+    #                           snr_max=1., snr_step=0.01,
+    #                           lambda_max=500.0, out_dir="snr_phase_data",
+    #                           save=True, verify=True)
     # compute_snr_phase_diagram(psi=0.5, sigma=None, k_l=10.0,
     #                           gamma_max=20.0, gamma_step=0.1,
     #                           snr_max=25.0, snr_step=0.1,
@@ -569,11 +574,11 @@ if __name__ == "__main__":
     # visualize_mixed_partial_at_zero(psi=0.1, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=None, save=False)
 
     # print(1./0)
-    n = 100
-    D = 1000 
-    spike_strength = 10.0
-    rho = 0.3
-    noise_std = 0.5
+    n = 500
+    D = 2500 
+    spike_strength = 10.
+    rho = 0.5
+    noise_std = 1.0
     # ridge_lambda = 0.1
 
     # k_ls = np.arange(0, 1.01, 0.01)
@@ -594,7 +599,7 @@ if __name__ == "__main__":
     # # print(1./0)
 
     k_l = 10.
-    lambdas = np.arange(0., 10000, 100.)
+    lambdas = np.arange(0., 100., 0.01)
 
     init_biases = np.zeros_like(lambdas)
     init_variances = np.zeros_like(lambdas)
@@ -633,7 +638,7 @@ if __name__ == "__main__":
     # plot blue and green stars at minimum of generalization error for init and feat learn, respectively
     plt.scatter(lambdas[np.argmin(init_gen_errors)], np.min(init_gen_errors), color='gray', marker='o', s=50, label='Init Min Gen Error')
     plt.scatter(lambdas[np.argmin(feat_gen_errors)], np.min(feat_gen_errors), color='royalblue', marker='o', s=50, label='Feat Learn Min Gen Error')
-
+    plt.xscale('log')
     # plt.ylim(0, 0.65)
     plt.xlabel('Ridge Regularization Strength')
     # plt.legend()

@@ -9,7 +9,7 @@ This is a standalone driver. It imports the estimation/theory functions from
 the existing pipeline as building blocks and does NOT modify them.
 
 Fixed sweep (index order is row-major over GAMMAS x RHOS):
-    gamma in {0, 1, 5}   x   rho in {0, 0.2, 0.4, 0.6, 0.8, 1.0}   -> 18 tasks
+    gamma in {1, 3, 10}   x   rho in {0, 0.2, 0.4, 0.6, 0.8, 1.0}   -> 18 tasks
 
 Usage
 -----
@@ -39,15 +39,15 @@ from stieltjes_asymptotics import compute_spiked_covariance_model_bias_and_varia
 
 
 # ---- the sweep grid (task index maps into this, row-major) ------------------
-GAMMAS = [0.0, 1.0, 5.0]
+GAMMAS = [1.0, 3.0, 10.0]
 RHOS = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
 COMBOS = [(g, r) for g in GAMMAS for r in RHOS]   # len == 18
 
 
 def default_config():
-    return dict(D=1000, n=500, sigma=0.4, k_l=10.0, ntrials=100, seed=0,
+    return dict(D=1000, n=500, sigma=0.5, k_l=10.0, ntrials=100, seed=0,
                 lambda_step=0.01, lambda_max=2.0, theory_step=0.01,
-                out_dir="spiked_sweep")
+                out_dir="new_spiked_sweep")
 
 
 def out_filename(cfg, gamma, rho):

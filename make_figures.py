@@ -29,6 +29,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from stieltjes_asymptotics import min_gen_error_over_lambda
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -108,10 +109,14 @@ def _lambda_star(lambdas, G):
     return lambdas[i], G[i]
 
 
-def _draw_lambda_star_tick(ax, lam, color):
+def _draw_lambda_star_tick(ax, lam, G, color):
     """Small upward caret at the bottom spine marking a curve's minimiser."""
     ax.plot([lam], [0.0], marker="^", markersize=5, color=color,
             transform=ax.get_xaxis_transform(), clip_on=False, zorder=6)
+    ax.plot([0.0], [G], marker=">", markersize=5, color=color,
+            transform=ax.get_yaxis_transform(), clip_on=False, zorder=6)
+    ax.plot([0.0, lam], [G, G], linestyle='dashed', color=color, zorder=2, lw=1.5)
+    ax.plot([lam, lam], [0.0, G], linestyle='dashed', color=color, zorder=2, lw=1.5)
 
 
 def _tight_ylim_with_headroom(ax, xlim_max, series, bottom_pad_frac=0.06,
@@ -211,8 +216,13 @@ def plot_f1_grid(gammas=None, rhos=None, markevery=8,
                         markevery=me, errorevery=me, zorder=4)
 
             # minimiser ticks (from the dense theory grid)
-            _draw_lambda_star_tick(ax, _lambda_star(lam_th, d["init_gen_error_theory"])[0], INIT_COLOR)
-            _draw_lambda_star_tick(ax, _lambda_star(lam_th, d["feat_gen_error_theory"])[0], FEAT_COLOR)
+            # _draw_lambda_star_tick(ax, _lambda_star(lam_th, d["init_gen_error_theory"])[0], INIT_COLOR)
+            # _draw_lambda_star_tick(ax, _lambda_star(lam_th, d["feat_gen_error_theory"])[0], FEAT_COLOR)
+            min_G_init, min_lam_init = min_gen_error_over_lambda(psi, g, r, sigma, 0.)
+            min_G_feat, min_lam_feat = min_gen_error_over_lambda(psi, g, r, sigma, k_l)
+
+            _draw_lambda_star_tick(ax, min_lam_init, min_G_init, INIT_COLOR)
+            _draw_lambda_star_tick(ax, min_lam_feat, min_G_feat, FEAT_COLOR)
 
             ax.set_xlim(0, upper_lambda)
 
@@ -293,7 +303,7 @@ def plot_single_run(pkl_path, marker_lambda_spacing=0.08, upper_lambda=None,
 
     D, n = d["D"], d["n"]
     sigma = d["noise_std"]
-    k_l = d.get("k_l", d.get("beta_coeff"))
+    k_l = d.get("k_l")
     gamma, rho = d["spike_strength"], d["rho"]
     psi = n / D
 
@@ -327,9 +337,14 @@ def plot_single_run(pkl_path, marker_lambda_spacing=0.08, upper_lambda=None,
                 ecolor=FEAT_COLOR, elinewidth=0.9, capsize=2.0,
                 markevery=me, errorevery=me, zorder=4,
                 label=r"$\hat f_{\mathrm{feat}}$ sim. ($\pm$s.e.m.)")
+    
+    min_G_init, min_lam_init = min_gen_error_over_lambda(psi, gamma, rho, sigma, 0.)
+    min_G_feat, min_lam_feat = min_gen_error_over_lambda(psi, gamma, rho, sigma, k_l)
 
-    _draw_lambda_star_tick(ax, _lambda_star(lam_th, d["init_gen_error_theory"])[0], INIT_COLOR)
-    _draw_lambda_star_tick(ax, _lambda_star(lam_th, d["feat_gen_error_theory"])[0], FEAT_COLOR)
+    # ax.scatter([min_G_init], [min_lam_init], color=INIT_COLOR, zorder=5, marker='*', s=130, edgecolor='black', clip_on=False)
+
+    _draw_lambda_star_tick(ax, min_lam_init, min_G_init, INIT_COLOR)
+    _draw_lambda_star_tick(ax, min_lam_feat, min_G_feat, FEAT_COLOR)
 
     ax.set_xlim(0, upper_lambda)
     init_lo = d["init_gen_errors"] - (init_sem if init_sem is not None else 0.0)
@@ -665,7 +680,8 @@ def plot_all_bias_variance(directory=BV_DIR, mark_every_lambda=0.1):
 
 
 # ---- SNR phase diagram: Delta* over (gamma, rho^2/sigma^2) ------------------
-def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=None):
+def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=None,
+                           gamma_range=None, snr_range=None, save=True, have_legend=True):
     """
     Heatmap of Delta* = inf_lambda G_feat - inf_lambda G_init over
     (gamma, rho^2/sigma^2). Diverging colormap on a SYMMETRIC linear scale
@@ -711,8 +727,11 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
 
     # find all gamma, SNR pairs where the difference is approximately zero and mark each of them with a small black dot
     # This is to highlight the boundary where feature learning neither helps nor hurts
-    ax.contour(gammas, snrs, Delta, levels=[0], colors="dimgray", linewidths=1.5, linestyles="dotted", zorder=6)
+    ax.contour(gammas, snrs, Delta, levels=[0], colors="silver", linewidths=2., linestyles="dotted", zorder=6)
 
+    ax.scatter([0.25], [0.8], color='red', zorder=5, marker='*', s=130, edgecolor='black', clip_on=False)
+    ax.scatter([15.], [0.01], color='red', zorder=5, marker='*', s=130, edgecolor='black', clip_on=False)
+    ax.scatter([10.], [0.3], color='blue', zorder=5, marker='*', s=130, edgecolor='black', clip_on=False)
     # hatched "SNR window" (heatmap stays visible: facecolor none).
     # show_upper: hatch between L and U. Otherwise U is above the cap, so the
     # visible window is everything above L up to the top edge.
@@ -725,15 +744,22 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
         top_mask = np.ones_like(gc, dtype=bool)
     mask = np.isfinite(lower) & (lower < snr_max) & top_mask
     ax.fill_between(gc, lo_c, window_top, where=mask, facecolor="none",
-                    edgecolor="0.15", hatch="////", linewidth=0.0, zorder=4)
+                    edgecolor="0.5", hatch="/", linewidth=0.0, zorder=4)
 
     if show_upper:
         ax.plot(gc, np.where(upper <= snr_max, upper, np.nan),
                 color="k", lw=2.0, ls="-", zorder=5)
     ax.plot(gc, lower_plot, color="k", lw=2.0, ls="--", zorder=5)
 
-    ax.set_xlim(gammas.min(), gammas.max())
-    ax.set_ylim(0, snr_max)
+    if gamma_range is not None:
+        ax.set_xlim(gamma_range)
+    else:
+        ax.set_xlim(gammas.min(), gammas.max())
+    
+    if snr_range is not None:
+        ax.set_ylim(snr_range)
+    else:
+        ax.set_ylim(0, snr_max)
     ax.set_xlabel(r"Spike Strength ($\gamma$)", fontsize=16)
     ax.set_ylabel(r"Signal-to-Noise Ratio ($\rho^2/\sigma^2$)", fontsize=16)
     ax.grid(False)
@@ -742,36 +768,43 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
     ax.tick_params(axis="both", which="major", labelsize=14)
 
     # plot legend in a separate file
+    if have_legend:
+        handles = []
+        if show_upper:
+            handles.append(Line2D([0], [0], color="k", lw=2.0, ls="-",
+                        label=r"$\rho^2/\sigma^2 = \dfrac{(1+\gamma\psi)^3}{\gamma(1+\gamma)(1-\psi)^3}$ (upper bound)"))
+        handles.append(Line2D([0], [0], color="k", lw=2.0, ls="--",
+                    label=r"$\rho^2/\sigma^2 =\dfrac{1+\gamma\psi^2}{\gamma(1-\psi)^2}$ (lower bound)"))
+        # handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="/-", label="Sufficient SNR Window"))
+        plt.rcParams['hatch.linewidth'] = 0.5
+        handles.append(Patch(facecolor="none", edgecolor="0.5", hatch="//", label="Sufficient SNR Window"))
 
-    handles = []
-    if show_upper:
-        handles.append(Line2D([0], [0], color="k", lw=2.0, ls="-",
-                       label=r"$\rho^2/\sigma^2 = \dfrac{(1+\gamma\psi)^3}{\gamma(1+\gamma)(1-\psi)^3}$ (lower bound)"))
-    handles.append(Line2D([0], [0], color="k", lw=2.0, ls="--",
-                   label=r"$\rho^2/\sigma^2 =\dfrac{1+\gamma\psi^2}{\gamma(1-\psi)^2}$ (upper bound)"))
-    # handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="/-", label="Sufficient SNR Window"))
-    plt.rcParams['hatch.linewidth'] = 0.5
-    handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="/", label="Sufficient SNR Window"))
-
-    handles.append(Line2D([0], [0], color="dimgray", lw=2.0, ls="dotted",
-                   label="Feature Learning Advantage Threshold"))
-    # ax.legend(handles=handles, loc="upper right", frameon=True, framealpha=0.92,
-    #           edgecolor="0.7", fontsize=10)
-    # make separate file
-    fig_legend = plt.figure(figsize=(5.2, 1.8))
-    fig_legend.legend(handles=handles, loc="center", frameon=True, framealpha=0.92,
-                      edgecolor="0.7", fontsize=10)
-    _savefig(fig_legend, f"snr_phase_legend")
-    plt.close(fig_legend)
+        handles.append(Line2D([0], [0], color="silver", lw=2.0, ls="dotted",
+                    label="Feature Learning \nAdvantage Threshold"))
+        # ax.legend(handles=handles, loc="upper right", frameon=True, framealpha=0.92,
+        #           edgecolor="0.7", fontsize=10)
+        # make separate file
+        fig_legend = plt.figure(figsize=(10.4, 1.8))
+        fig_legend.legend(handles=handles, loc="center", frameon=True, framealpha=0.92,
+                        edgecolor="0.7", fontsize=14, ncol=2)
+        if save:
+            _savefig(fig_legend, f"snr_phase_legend")
+        plt.close(fig_legend)
 
     # caption = (rf"$\psi={psi:g}$, $\{fixed_tag}$, $k_\ell={k_l:g}$. "
     #            rf"Blue: feature learning lowers optimal error; red: it raises it.")
     # fig.text(0.5, -0.02, caption, ha="center", va="top", fontsize=8.5, color="0.25")
+    range_tag = ""
+    if gamma_range is not None or snr_range is not None:
+        range_tag = f"gamma_range={gamma_range}_snr_range={snr_range}"
 
     fig.tight_layout()
     if save_stem is None:
-        save_stem = f"snr_phase_psi={psi:g}_{fixed_tag}_kl={k_l:g}"
-    _savefig(fig, save_stem)
+        save_stem = f"snr_phase_psi={psi:g}_{fixed_tag}_kl={k_l:g}_{range_tag}"
+    if save:
+        _savefig(fig, save_stem)
+    else:
+        plt.show()
     plt.close(fig)
     return os.path.join(OUT_DIR, f"{save_stem}.pdf")
 
@@ -840,4 +873,7 @@ def _savefig(fig, stem):
 if __name__ == "__main__":
     # plot_f1_grid()
     # plot_isotropic()
-    plot_all_snr_phase()
+    # plot_all_snr_phase()
+    plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=50_snrmax=1.pkl"), 
+                           gamma_range=(14.0, 16.), snr_range=(0., 0.02), 
+                           save=False, have_legend=False)
