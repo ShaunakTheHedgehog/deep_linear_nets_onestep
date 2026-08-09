@@ -197,6 +197,7 @@ def generate_data(D, n, Sigma, noise_std=0., w_star=None, rng=None):
 
     return X, y, w_star 
 
+
 def calclulate_alpha_beta_gen_error_heatmap(D, n, alpha_exps, beta_exps, ridge_lambda, noise_std, learn_step_coeff=10., plot=True):
     psi = 1.*n/D 
     q = 1.*D/n 

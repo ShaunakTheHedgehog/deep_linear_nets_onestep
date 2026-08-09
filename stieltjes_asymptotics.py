@@ -549,9 +549,9 @@ def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
 
 
 if __name__ == "__main__":
-    print(min_gen_error_over_lambda(0.2, 10, 0.5, 1., 10.))
+    print(min_gen_error_over_lambda(0.2, 10, 0.3, 1., 10.))
     print(min_gen_error_over_lambda(0.2, 15, 0.1, 1., 10.))
-    print(min_gen_error_over_lambda(0.2, 0.25, 0.8, 1., 10.))
+    print(min_gen_error_over_lambda(0.2, 0.25, 1.0, 1., 10.))
     # print(1./0)
 
     # compute_snr_phase_diagram(psi=0.8, sigma=0.03, k_l=10.0,
@@ -576,8 +576,8 @@ if __name__ == "__main__":
     # print(1./0)
     n = 500
     D = 2500 
-    spike_strength = 10.
-    rho = 0.5
+    spike_strength = 0.25
+    rho = 1.0
     noise_std = 1.0
     # ridge_lambda = 0.1
 
@@ -638,7 +638,6 @@ if __name__ == "__main__":
     # plot blue and green stars at minimum of generalization error for init and feat learn, respectively
     plt.scatter(lambdas[np.argmin(init_gen_errors)], np.min(init_gen_errors), color='gray', marker='o', s=50, label='Init Min Gen Error')
     plt.scatter(lambdas[np.argmin(feat_gen_errors)], np.min(feat_gen_errors), color='royalblue', marker='o', s=50, label='Feat Learn Min Gen Error')
-    plt.xscale('log')
     # plt.ylim(0, 0.65)
     plt.xlabel('Ridge Regularization Strength')
     # plt.legend()
