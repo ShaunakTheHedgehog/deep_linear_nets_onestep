@@ -41,7 +41,7 @@ SNR_PHASE_DIR = os.path.join(HERE, "snr_phase_data")             # SNR phase-dia
 OUT_DIR = os.path.join(HERE, "paper_figures")
 
 # ---- colour / style semantics (consistent across every figure) -------------
-INIT_COLOR = "#6E6E6E"   # grey  : baseline  f_init
+INIT_COLOR = "#E05C5C"   # grey  : baseline  f_init
 FEAT_COLOR = "#0072B2"   # blue  : feature-learning  f_feat  (colourblind-safe)
 
 # per-k_l colours for the c_lambda line plots (colourblind-safe)
@@ -111,13 +111,13 @@ def _lambda_star(lambdas, G):
 
 def _draw_lambda_star_tick(ax, lam, G, color):
     """Small upward caret at the bottom spine marking a curve's minimiser."""
-    ax.plot([lam], [-0.01], marker="^", markersize=4, color=color,
+    ax.plot([lam], [-0.02], marker="^", markersize=5, color=color,
             transform=ax.get_xaxis_transform(), clip_on=False, zorder=6)
-    ax.plot([-0.01], [G], marker=">", markersize=4, color=color,
+    ax.plot([-0.02], [G], marker=">", markersize=5, color=color,
             transform=ax.get_yaxis_transform(), clip_on=False, zorder=6)
     # ax.plot([0.0, lam], [G, G], linestyle='dashed', color=color, zorder=2, lw=1.5)
     # ax.plot([lam, lam], [0.0, G], linestyle='dashed', color=color, zorder=2, lw=1.5)
-    ax.scatter(lam, G, color=color, zorder=6, marker='*', s=50, edgecolor='black', clip_on=False)
+    ax.scatter(lam, G, color=color, zorder=6, marker='*', s=150, edgecolor='black', clip_on=False)
 
 
 def _tight_ylim_with_headroom(ax, xlim_max, series, bottom_pad_frac=0.06,
@@ -362,6 +362,7 @@ def plot_single_run(pkl_path, marker_lambda_spacing=0.08, upper_lambda=None,
     ax.set_xlabel(r"Ridge ($\lambda$)")
     ax.set_ylabel("Generalization Error")
     ax.set_title(rf"$\gamma={gamma:g}$, $\rho={rho:g}$")
+    ax.tick_params(axis='both', labelsize=18)
     # ax.legend(frameon=False, loc="best")
 
     # ntrials, seed = d.get("ntrials", "?"), d.get("seed", "?")
@@ -754,9 +755,9 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
     # This is to highlight the boundary where feature learning neither helps nor hurts
     ax.contour(gammas, snrs, Delta, levels=[0], colors="silver", linewidths=2., linestyles="dotted", zorder=6)
 
-    ax.scatter([0.25], [1.0], color='red', zorder=6, marker='*', s=130, edgecolor='black', clip_on=False)
-    ax.scatter([15.], [0.01], color='red', zorder=6, marker='*', s=130, edgecolor='black', clip_on=False)
-    ax.scatter([10.], [0.25], color='darkblue', zorder=6, marker='*', s=130, edgecolor='black', clip_on=False)
+    ax.scatter([0.25], [1.0], color='red', zorder=8, marker='*', s=200, edgecolor='black', clip_on=False, lw=1.9)
+    ax.scatter([15.], [0.01], color='red', zorder=8, marker='*', s=200, edgecolor='black', clip_on=False, lw=1.9)
+    ax.scatter([10.], [0.25], color='darkblue', zorder=8, marker='*', s=200, edgecolor='black', clip_on=False, lw=1.9)
     # hatched "SNR window" (heatmap stays visible: facecolor none).
     # show_upper: hatch between L and U. Otherwise U is above the cap, so the
     # visible window is everything above L up to the top edge.
@@ -896,11 +897,17 @@ def _savefig(fig, stem):
 
 
 if __name__ == "__main__":
-    plot_single_run('new_spiked_sweep/spiked_gamma=0.25_rho=1_D=2500_n=500_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=3, upper_lambda=None,
-                    save_stem=None)
+    # plot_single_run('new_spiked_sweep/spiked_gamma=0.25_rho=1_D=2500_n=500_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=3, upper_lambda=None,
+    #                     save_stem=None)
+    # plot_single_run('new_spiked_sweep/spiked_gamma=15_rho=0.1_D=2500_n=500_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.25, upper_lambda=None,
+    #                     save_stem=None)
+    # plot_single_run('new_spiked_sweep/spiked_gamma=10_rho=0.5_D=2500_n=500_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.5, upper_lambda=None,
+    #                 save_stem=None)
+    # save_single_run_legend()
+
     # plot_f1_grid()
     # plot_isotropic()
     # plot_all_snr_phase()
-    # plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=50_snrmax=1.pkl"), 
-    #                        gamma_range=(0., 20.), snr_range=(0., 1.), 
-    #                        save=True, have_legend=False)
+    plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=50_snrmax=1.pkl"), 
+                           gamma_range=(0., 20.), snr_range=(0., 1.), 
+                           save=True, have_legend=False)
