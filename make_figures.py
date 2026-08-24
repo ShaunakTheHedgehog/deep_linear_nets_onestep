@@ -38,6 +38,7 @@ SPIKED_DIR = os.path.join(HERE, "spiked_covariance_experiments")  # legacy runs
 CLAMBDA_DIR = os.path.join(HERE, "c_lambda_data")                 # c_lambda study data
 BV_DIR = os.path.join(HERE, "bias_variance_data")                 # bias/variance study data
 SNR_PHASE_DIR = os.path.join(HERE, "snr_phase_data")             # SNR phase-diagram data
+JOINT_PHASE_DIR = os.path.join(HERE, "joint_phase_data")         # joint (lambda,k_l) optimum
 OUT_DIR = os.path.join(HERE, "paper_figures")
 
 # ---- colour / style semantics (consistent across every figure) -------------
@@ -290,6 +291,151 @@ def _infer_ntrials(directory):
     return "?"
 
 
+# ---- scale-flexible single run (linear / log / symlog prototypes) ----------
+def _log_marker_indices(lam, per_decade=6, lam_lo=None):
+    """Indices into `lam` closest to log-uniform targets (~per_decade each)."""
+    pos = lam > 0
+    lo = float(lam[pos].min()) if lam_lo is None else float(lam_lo)
+    hi = float(lam.max())
+    ndec = max(np.log10(hi / lo), 1e-9)
+    ntarget = max(2, int(np.ceil(ndec * per_decade)) + 1)
+    targets = np.geomspace(lo, hi, ntarget)
+    idx = sorted({int(np.argmin(np.abs(lam - t))) for t in targets})
+    return np.array(idx, dtype=int)
+
+
+def _theory_on_grid(d, lam_grid):
+    """Recompute the two theory curves on an arbitrary lambda grid (closed form)."""
+    from stieltjes_asymptotics import compute_spiked_covariance_model_bias_and_variance
+    D, n = d["D"], d["n"]
+    k_l, gamma, rho, sigma = d.get("k_l"), d["spike_strength"], d["rho"], d["noise_std"]
+    gi = np.array([compute_spiked_covariance_model_bias_and_variance(
+        n, D, 0.0, l, gamma, rho, sigma)[2] for l in lam_grid])
+    gf = np.array([compute_spiked_covariance_model_bias_and_variance(
+        n, D, k_l, l, gamma, rho, sigma)[2] for l in lam_grid])
+    return gi, gf
+
+
+def plot_single_run_scaled(pkl_path, xscale="symlog", markers_per_decade=6,
+                           marker_lambda_spacing=0.08, upper_lambda=None,
+                           ymax=None, show_scale_in_title=True,
+                           out_dir=None, save_stem=None):
+    """
+    G vs lambda for one saved run, with a selectable x-scale:
+      'linear' -- as before (uniform marker spacing in lambda)
+      'log'    -- log lambda, cut off at the smallest nonzero simulated lambda
+      'symlog' -- linear below linthresh (so lambda = 0 is kept), log above
+
+    Theory is recomputed on a dense log-spaced grid so the curves stay smooth at
+    small lambda; simulation markers are snapped to log-uniform targets.
+    """
+    set_paper_style()
+    with open(pkl_path, "rb") as fh:
+        d = pickle.load(fh)
+
+    D, n = d["D"], d["n"]
+    sigma, k_l = d["noise_std"], d.get("k_l")
+    gamma, rho = d["spike_strength"], d["rho"]
+    psi = n / D
+
+    lam = d["lambdas"]
+    if upper_lambda is None:
+        upper_lambda = float(lam.max())
+    lam_lo = float(lam[lam > 0].min())          # left cutoff / symlog threshold
+
+    # ---- theory grid ----
+    if xscale == "linear":
+        lam_th = d.get("lambdas_theory", lam)
+        th_i, th_f = d["init_gen_error_theory"], d["feat_gen_error_theory"]
+    else:
+        lam_th = np.geomspace(lam_lo, upper_lambda, 10_000)
+        if xscale == "symlog":                   # add the linear stretch incl. 0
+            lam_th = np.unique(np.concatenate([np.linspace(0.0, lam_lo, 1000), lam_th]))
+        th_i, th_f = _theory_on_grid(d, lam_th)
+
+    # ---- marker indices ----
+    if xscale == "linear":
+        step = float(np.median(np.diff(lam))) if len(lam) > 1 else marker_lambda_spacing
+        me = max(1, round(marker_lambda_spacing / step))
+    else:
+        me = list(_log_marker_indices(lam, markers_per_decade, lam_lo))
+        # symlog displays lambda = 0, so mark that simulated point too (pure log
+        # cannot show it). At lambda = 0 we have c_lambda = 1 exactly, so the init
+        # and feat markers coincide -- which is the point worth showing.
+        if xscale == "symlog" and lam[0] == 0.0 and 0 not in me:
+            me = [0] + me
+
+    fig, ax = plt.subplots(figsize=(5.2, 4.2))
+    ax.plot(lam_th, th_i, color=INIT_COLOR, zorder=3)
+    ax.plot(lam_th, th_f, color=FEAT_COLOR, zorder=4)
+
+    init_sem, feat_sem = d.get("init_gen_errors_sem"), d.get("feat_gen_errors_sem")
+    ax.errorbar(lam, d["init_gen_errors"], yerr=init_sem, linestyle="none",
+                marker="o", markersize=4.5, markerfacecolor="none",
+                markeredgecolor=INIT_COLOR, markeredgewidth=1.0,
+                ecolor=INIT_COLOR, elinewidth=0.9, capsize=2.0,
+                markevery=me, errorevery=me, zorder=3)
+    ax.errorbar(lam, d["feat_gen_errors"], yerr=feat_sem, linestyle="none",
+                marker="s", markersize=4.2, markerfacecolor="none",
+                markeredgecolor=FEAT_COLOR, markeredgewidth=1.0,
+                ecolor=FEAT_COLOR, elinewidth=0.9, capsize=2.0,
+                markevery=me, errorevery=me, zorder=4)
+
+    min_G_init, min_lam_init = min_gen_error_over_lambda(psi, gamma, rho, sigma, 0.)
+    min_G_feat, min_lam_feat = min_gen_error_over_lambda(psi, gamma, rho, sigma, k_l)
+    _draw_lambda_star_tick(ax, min_lam_init, min_G_init, INIT_COLOR)
+    _draw_lambda_star_tick(ax, min_lam_feat, min_G_feat, FEAT_COLOR)
+
+    if xscale == "log":
+        ax.set_xscale("log")
+        ax.set_xlim(lam_lo, upper_lambda)
+        x_lo = lam_lo
+    elif xscale == "symlog":
+        ax.set_xscale("symlog", linthresh=lam_lo, linscale=0.5)
+        ax.set_xlim(0.0, upper_lambda)
+        x_lo = 0.0
+    else:
+        ax.set_xlim(0.0, upper_lambda)
+        x_lo = 0.0
+
+    # tight y-limits over only the visible x-range
+    def _vis(x, y):
+        x, y = np.asarray(x), np.asarray(y)
+        m = (x >= x_lo - 1e-12) & (x <= upper_lambda + 1e-9)
+        return y[m]
+    ys = [_vis(lam_th, th_i), _vis(lam_th, th_f)]
+    for arr, s in ((d["init_gen_errors"], init_sem), (d["feat_gen_errors"], feat_sem)):
+        s = s if s is not None else 0.0
+        ys += [_vis(lam, arr - s), _vis(lam, arr + s)]
+    yall = np.concatenate(ys); yall = yall[np.isfinite(yall)]
+    lo_y, hi_y = float(yall.min()), float(yall.max())
+    if ymax is not None:                       # crop the top; keep the data-driven floor
+        hi_y = float(ymax)
+    pad = 0.06 * max(hi_y - lo_y, 1e-9)
+    ax.set_ylim(lo_y - pad, hi_y if ymax is not None else hi_y + pad)
+
+    ax.set_xlabel(r"Ridge ($\lambda$)")
+    ax.set_ylabel("Generalization Error")
+    title = rf"$\gamma={gamma:g}$, $\rho={rho:g}$"
+    if show_scale_in_title:
+        title += rf"  [{xscale}]"
+    ax.set_title(title)
+    ax.tick_params(axis='both', labelsize=18)
+
+    fig.tight_layout()
+    if save_stem is None:
+        save_stem = f"G_gamma={gamma:g}_rho={rho:g}_D={D}_n={n}_sigma={sigma:g}_{xscale}"
+        if ymax is not None:
+            save_stem += f"_ymax{ymax:g}"
+    target = out_dir or OUT_DIR
+    os.makedirs(target, exist_ok=True)
+    for ext in ("pdf", "png"):
+        fig.savefig(os.path.join(target, f"{save_stem}.{ext}"))
+    plt.close(fig)
+    print(f"[saved] {os.path.join(target, save_stem)}.pdf / .png")
+    return os.path.join(target, f"{save_stem}.pdf")
+
+
 # ---- single-run: G vs lambda for one saved (gamma, rho) pkl ----------------
 def plot_single_run(pkl_path, marker_lambda_spacing=0.08, upper_lambda=None,
                     save_stem=None):
@@ -316,6 +462,11 @@ def plot_single_run(pkl_path, marker_lambda_spacing=0.08, upper_lambda=None,
     # convert the requested lambda-unit spacing into an index stride
     lam_step = float(np.median(np.diff(lam))) if len(lam) > 1 else marker_lambda_spacing
     me = max(1, round(marker_lambda_spacing / lam_step))
+
+    if marker_lambda_spacing == 3:
+        indices = np.array([0, 2, 4, 5, 6, 9, 15, 30, 50, 70, 90])
+        next_indices = np.arange(90, len(lam), me)
+        me = np.concatenate([indices, next_indices])
 
     fig, ax = plt.subplots(figsize=(5.2, 4.2))
 
@@ -888,6 +1039,153 @@ def plot_all_heatmaps(pkl_path, directory=SNR_PHASE_DIR):
     _savefig(fig, save_stem)
 
 
+# ---- joint (lambda, k_l) optimum phase diagrams -----------------------------
+def _joint_axes(ax, gammas, snrs):
+    ax.set_xlim(gammas.min(), gammas.max())
+    ax.set_ylim(snrs.min(), snrs.max())
+    ax.set_xlabel(r"Spike Strength ($\gamma$)", fontsize=16)
+    ax.set_ylabel(r"Signal-to-Noise Ratio ($\rho^2/\sigma^2$)", fontsize=16)
+    ax.grid(False)
+
+
+def plot_joint_G_opt(pkl_path, cmap="viridis", save_stem=None):
+    """Heatmap 1: minimal G jointly over lambda >= 0 and 0 <= k_l <= k_max."""
+    set_paper_style()
+    with open(pkl_path, "rb") as fh:
+        d = pickle.load(fh)
+    gammas, snrs, G = d["gammas"], d["snrs"], d["G_opt"]
+
+    fig, ax = plt.subplots(figsize=(6.6, 5.2))
+    pcm = ax.pcolormesh(gammas, snrs, G, cmap=cmap, shading="gouraud")
+    cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
+    cbar.set_label("Optimal Generalization Error", fontsize=15)
+    _joint_axes(ax, gammas, snrs)
+    fig.tight_layout()
+    if save_stem is None:
+        save_stem = f"joint_G_opt_psi={d['psi']:g}_sigma={d['sigma']:g}_kmax={d['k_max']:g}"
+    _savefig(fig, save_stem)
+    plt.close(fig)
+    return os.path.join(OUT_DIR, f"{save_stem}.pdf")
+
+
+def plot_joint_delta(pkl_path, cmap="Blues_r", save_stem=None):
+    """
+    Heatmap 2: G_opt - G_baseline. This is <= 0 everywhere by construction
+    (k_l = 0 is inside the feasible set), so a sequential map over the actual
+    [min, 0] range is used -- white = no gain from feature learning.
+    """
+    set_paper_style()
+    with open(pkl_path, "rb") as fh:
+        d = pickle.load(fh)
+    gammas, snrs, Delta = d["gammas"], d["snrs"], d["Delta"]
+
+    fig, ax = plt.subplots(figsize=(6.6, 5.2))
+    pcm = ax.pcolormesh(gammas, snrs, Delta, cmap=cmap,
+                        vmin=float(np.nanmin(Delta)), vmax=0.0, shading="gouraud")
+    cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
+    cbar.set_label("Generalization Error Difference", fontsize=15)
+    _joint_axes(ax, gammas, snrs)
+    fig.tight_layout()
+    if save_stem is None:
+        save_stem = f"joint_delta_psi={d['psi']:g}_sigma={d['sigma']:g}_kmax={d['k_max']:g}"
+    _savefig(fig, save_stem)
+    plt.close(fig)
+    return os.path.join(OUT_DIR, f"{save_stem}.pdf")
+
+
+def plot_joint_k_opt(pkl_path, cmap="magma", display_cap=10.0,
+                     mark_saturated=True, save_stem=None):
+    """
+    Heatmap 3: the optimal k_l, shown on [0, display_cap] with the top bin
+    labelled '>= display_cap'. When the data were generated with k_max = inf,
+    k_opt is genuinely infinite wherever the optimum sits at the ceiling; those
+    cells are clipped to display_cap for plotting.
+
+    The dashed contour is the boundary of that region: outside it a finite
+    optimal k_l exists; inside it G is still decreasing in c at the ceiling, so
+    more feature learning always helps and the optimum runs to k_l -> infinity.
+    """
+    set_paper_style()
+    with open(pkl_path, "rb") as fh:
+        d = pickle.load(fh)
+    gammas, snrs, K = d["gammas"], d["snrs"], d["k_opt"]
+    k_max, Sat = float(d["k_max"]), d["saturated"]
+    cap = float(min(display_cap, k_max))
+
+    K_disp = np.where(np.isfinite(K), K, cap)     # inf -> top of the display range
+    K_disp = np.minimum(K_disp, cap)
+
+    fig, ax = plt.subplots(figsize=(6.6, 5.2))
+    pcm = ax.pcolormesh(gammas, snrs, K_disp, cmap=cmap, vmin=0.0, vmax=cap,
+                        shading="gouraud")
+    cbar = fig.colorbar(pcm, ax=ax, pad=0.02, extend="max")
+    cbar.set_label(r"Optimal $k_\ell$", fontsize=15)
+    ticks = list(np.linspace(0, cap, 6))
+    cbar.set_ticks(ticks)
+    labels = [f"{t:g}" for t in ticks]
+    labels[-1] = rf"$\geq {cap:g}$"
+    cbar.set_ticklabels(labels)
+
+    if mark_saturated and Sat.any() and not Sat.all():
+        # single boundary contour (white halo + dashed black) -- reads far better
+        # than hatching a region that covers most of the panel
+        ax.contour(gammas, snrs, Sat.astype(float), levels=[0.5],
+                   colors="w", linewidths=2.2, zorder=4)
+        ax.contour(gammas, snrs, Sat.astype(float), levels=[0.5],
+                   colors="k", linewidths=1.2, linestyles="--", zorder=5)
+
+    _joint_axes(ax, gammas, snrs)
+    fig.tight_layout()
+    if save_stem is None:
+        save_stem = f"joint_k_opt_psi={d['psi']:g}_sigma={d['sigma']:g}_kmax={d['k_max']:g}"
+    _savefig(fig, save_stem)
+    plt.close(fig)
+    return os.path.join(OUT_DIR, f"{save_stem}.pdf")
+
+
+def plot_all_joint_phase(directory=JOINT_PHASE_DIR):
+    """Render all three joint-optimum heatmaps for every dataset in `directory`."""
+    for path in sorted(glob.glob(os.path.join(directory, "joint_phase_*.pkl"))):
+        plot_joint_G_opt(path)
+        plot_joint_delta(path)
+        plot_joint_k_opt(path)
+
+
+def plot_joint_cap_consistency(exact_pkl, capped_pkl,
+                               out_dir=os.path.join(HERE, "consistency_checks"),
+                               save_stem="joint_cap_consistency"):
+    """
+    Diagnostic (not a paper figure): where does the k_l cap actually matter?
+    Heatmap of G_opt(exact, k_l unbounded) - G_opt(capped), which is <= 0 since
+    the exact problem optimizes over a strictly larger feasible set.
+    """
+    set_paper_style()
+    with open(exact_pkl, "rb") as fh:
+        ex = pickle.load(fh)
+    with open(capped_pkl, "rb") as fh:
+        cp = pickle.load(fh)
+    diff = ex["G_opt"] - cp["G_opt"]
+    gammas, snrs = ex["gammas"], ex["snrs"]
+
+    fig, ax = plt.subplots(figsize=(6.6, 5.2))
+    pcm = ax.pcolormesh(gammas, snrs, diff, cmap="Blues_r",
+                        vmin=float(np.nanmin(diff)), vmax=0.0, shading="gouraud")
+    cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
+    cbar.set_label(rf"$G^{{\rm opt}}_{{k_\ell\leq\infty}} - "
+                   rf"G^{{\rm opt}}_{{k_\ell\leq {cp['k_max']:g}}}$", fontsize=14)
+    _joint_axes(ax, gammas, snrs)
+    ax.set_title(f"effect of the $k_\\ell$ cap "
+                 f"(max {np.nanmin(diff):.4f}, mean {np.nanmean(diff):.5f})",
+                 fontsize=12)
+    fig.tight_layout()
+    os.makedirs(out_dir, exist_ok=True)
+    for ext in ("pdf", "png"):
+        fig.savefig(os.path.join(out_dir, f"{save_stem}.{ext}"))
+    plt.close(fig)
+    print(f"[saved] {os.path.join(out_dir, save_stem)}.pdf / .png")
+    return os.path.join(out_dir, f"{save_stem}.pdf")
+
+
 # ---- io --------------------------------------------------------------------
 def _savefig(fig, stem):
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -897,17 +1195,37 @@ def _savefig(fig, stem):
 
 
 if __name__ == "__main__":
-    # plot_single_run('new_spiked_sweep/spiked_gamma=0.25_rho=1_D=2500_n=500_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=3, upper_lambda=None,
+    # plot_single_run('new_spiked_sweep/spiked_gamma=0.25_rho=1_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=3, upper_lambda=None,
     #                     save_stem=None)
-    # plot_single_run('new_spiked_sweep/spiked_gamma=15_rho=0.1_D=2500_n=500_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.25, upper_lambda=None,
+    # plot_single_run('new_spiked_sweep/spiked_gamma=15_rho=0.1_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.25, upper_lambda=None,
     #                     save_stem=None)
-    # plot_single_run('new_spiked_sweep/spiked_gamma=10_rho=0.5_D=2500_n=500_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.5, upper_lambda=None,
+    # plot_single_run('new_spiked_sweep/spiked_gamma=10_rho=0.5_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.5, upper_lambda=None,
     #                 save_stem=None)
+    # plot_single_run('spiked_sweep/spiked_gamma=0_rho=0_D=1000_n=500_sigma=0.5_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.1, upper_lambda=None,
+    #                 save_stem=None)
+    plot_single_run('new_spiked_sweep/spiked_gamma=20_rho=0_D=2000_n=1000_sigma=0.5_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.1, upper_lambda=None,
+                    save_stem=None)
     # save_single_run_legend()
+    print(1./0)
 
     # plot_f1_grid()
     # plot_isotropic()
     # plot_all_snr_phase()
-    plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=50_snrmax=1.pkl"), 
-                           gamma_range=(0., 20.), snr_range=(0., 1.), 
-                           save=True, have_legend=False)
+    # plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=50_snrmax=1.pkl"), 
+    #                        gamma_range=(0., 20.), snr_range=(0., 1.), 
+    #                        save=True, have_legend=False)
+
+    base = 'new_spiked_sweep/spiked_{}_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl'
+    panels = [('gamma=0.25_rho=1',  None),
+            ('gamma=10_rho=0.5',  1.5),
+            ('gamma=15_rho=0.1',  None)]
+
+    for tag, ym in panels:
+        plot_single_run_scaled(
+            base.format(tag),
+            xscale='symlog',
+            ymax=ym,
+            show_scale_in_title=False,
+            out_dir='paper_figures',
+            save_stem=f'G_{tag}_D=5000_n=1000_sigma=1_symlog',
+        )

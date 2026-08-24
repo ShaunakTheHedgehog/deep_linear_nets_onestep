@@ -549,16 +549,17 @@ def compute_snr_phase_diagram(psi=0.5, sigma=0.2, k_l=10.0,
 
 
 if __name__ == "__main__":
-    print(min_gen_error_over_lambda(0.2, 10, 0.3, 1., 10.))
-    print(min_gen_error_over_lambda(0.2, 15, 0.1, 1., 10.))
-    print(min_gen_error_over_lambda(0.2, 0.25, 1.0, 1., 10.))
+    # print(min_gen_error_over_lambda(0.2, 10, 0.3, 1., 10.))
+    # print(min_gen_error_over_lambda(0.2, 15, 0.1, 1., 10.))
+    # print(min_gen_error_over_lambda(0.2, 0.25, 1.0, 1., 10.))
     # print(1./0)
 
-    # compute_snr_phase_diagram(psi=0.8, sigma=0.03, k_l=10.0,
-    #                           gamma_max=10.0, gamma_step=0.1,
-    #                           snr_max=1111., snr_step=1.,
-    #                           lambda_max=100.0, out_dir="snr_phase_data",
-    #                           save=True, verify=True)
+    compute_snr_phase_diagram(psi=0.2, sigma=1.0, k_l=10.0,
+                              gamma_max=40.0, gamma_step=0.01,
+                              snr_max=1.0, snr_step=0.001,
+                              lambda_max=1000.0, out_dir="snr_phase_data",
+                              save=True, verify=True)
+    print(1./0)
     # compute_snr_phase_diagram(psi=0.2, sigma=1.0, k_l=10.0,
     #                           gamma_max=50.0, gamma_step=0.1,
     #                           snr_max=1., snr_step=0.01,
