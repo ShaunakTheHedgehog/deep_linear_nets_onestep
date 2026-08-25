@@ -88,6 +88,7 @@ def run_one(gamma, rho, cfg):
         for j, lam in enumerate(lambdas):
             init_trials[t, j] = compute_gen_error(w_star, Sigma, X, y, k_l=0., ridge_lambda=lam)
             feat_trials[t, j] = compute_gen_error(w_star, Sigma, X, y, k_l=k_l, ridge_lambda=lam)
+        print(f'Trial {t + 1}/{ntrials} done', flush=True)
 
     init_mean, feat_mean = init_trials.mean(0), feat_trials.mean(0)
     init_sem = init_trials.std(0, ddof=1) / np.sqrt(ntrials)
