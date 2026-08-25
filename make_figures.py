@@ -42,7 +42,7 @@ JOINT_PHASE_DIR = os.path.join(HERE, "joint_phase_data")         # joint (lambda
 OUT_DIR = os.path.join(HERE, "paper_figures")
 
 # ---- colour / style semantics (consistent across every figure) -------------
-INIT_COLOR = "#E05C5C"   # grey  : baseline  f_init
+INIT_COLOR = "#E05C5C"   # red  : baseline  f_init
 FEAT_COLOR = "#0072B2"   # blue  : feature-learning  f_feat  (colourblind-safe)
 
 # per-k_l colours for the c_lambda line plots (colourblind-safe)
@@ -907,7 +907,7 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
     ax.contour(gammas, snrs, Delta, levels=[0], colors="silver", linewidths=2., linestyles="dotted", zorder=6)
 
     ax.scatter([0.25], [1.0], color='red', zorder=8, marker='*', s=200, edgecolor='black', clip_on=False, lw=1.9)
-    ax.scatter([15.], [0.01], color='red', zorder=8, marker='*', s=200, edgecolor='black', clip_on=False, lw=1.9)
+    ax.scatter([20.], [0.0049], color='red', zorder=8, marker='*', s=200, edgecolor='black', clip_on=False, lw=1.9)
     ax.scatter([10.], [0.25], color='darkblue', zorder=8, marker='*', s=200, edgecolor='black', clip_on=False, lw=1.9)
     # hatched "SNR window" (heatmap stays visible: facecolor none).
     # show_upper: hatch between L and U. Otherwise U is above the cap, so the
@@ -977,7 +977,7 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
 
     fig.tight_layout()
     if save_stem is None:
-        save_stem = f"snr_phase_psi={psi:g}_{fixed_tag}_kl={k_l:g}_{range_tag}"
+        save_stem = f"snr_phase_psi={psi:g}_{fixed_tag}_kl={k_l:g}_{range_tag}_NEW"
     if save:
         _savefig(fig, save_stem)
     else:
@@ -1203,17 +1203,17 @@ if __name__ == "__main__":
     #                 save_stem=None)
     # plot_single_run('spiked_sweep/spiked_gamma=0_rho=0_D=1000_n=500_sigma=0.5_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.1, upper_lambda=None,
     #                 save_stem=None)
-    plot_single_run('new_spiked_sweep/spiked_gamma=20_rho=0_D=2000_n=1000_sigma=0.5_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.1, upper_lambda=None,
-                    save_stem=None)
+    # plot_single_run('new_spiked_sweep/spiked_gamma=20_rho=0_D=2000_n=1000_sigma=0.5_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.1, upper_lambda=None,
+    #                 save_stem=None)
     # save_single_run_legend()
-    print(1./0)
 
     # plot_f1_grid()
     # plot_isotropic()
     # plot_all_snr_phase()
-    # plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=50_snrmax=1.pkl"), 
-    #                        gamma_range=(0., 20.), snr_range=(0., 1.), 
-    #                        save=True, have_legend=False)
+    plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=20_snrmax=1_gammastep=0.1_snrstep=0.001.pkl"), 
+                           gamma_range=(19., 20.), snr_range=(0., 0.02), 
+                           save=False, have_legend=False)
+    print(1/0)
 
     base = 'new_spiked_sweep/spiked_{}_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl'
     panels = [('gamma=0.25_rho=1',  None),
