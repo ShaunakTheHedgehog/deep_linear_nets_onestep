@@ -34,6 +34,7 @@ from kernel_ridge_regression import (
     generate_random_alignment_vector,
     generate_data,
     compute_gen_error,
+    compute_A_inv,
 )
 from stieltjes_asymptotics import compute_spiked_covariance_model_bias_and_variance
 
@@ -86,8 +87,9 @@ def run_one(gamma, rho, cfg):
         np.random.seed(trial_seed)   # pins the noise term inside generate_data
         X, y, _ = generate_data(D, n, Sigma, noise_std=sigma, w_star=w_star, rng=trial_seed)
         for j, lam in enumerate(lambdas):
-            init_trials[t, j] = compute_gen_error(w_star, Sigma, X, y, k_l=0., ridge_lambda=lam)
-            feat_trials[t, j] = compute_gen_error(w_star, Sigma, X, y, k_l=k_l, ridge_lambda=lam)
+            A_inv = compute_A_inv(X, lam)   # precompute A_inv for efficiency
+            init_trials[t, j] = compute_gen_error(w_star, Sigma, X, y, k_l=0., ridge_lambda=lam, A_inv=A_inv)
+            feat_trials[t, j] = compute_gen_error(w_star, Sigma, X, y, k_l=k_l, ridge_lambda=lam, A_inv=A_inv)
         print(f'Trial {t + 1}/{ntrials} done', flush=True)
 
     init_mean, feat_mean = init_trials.mean(0), feat_trials.mean(0)

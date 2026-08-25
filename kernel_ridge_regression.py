@@ -11,6 +11,20 @@ from matplotlib.colors import TwoSlopeNorm
 from stieltjes_asymptotics import *
 
 
+def compute_A_inv(X, ridge_lambda):
+    '''
+    Arguments: 
+    X               :   D x n matrix of training inputs
+    ridge_lambda    :   ridge regularization strength
+    '''
+    D, n = X.shape
+    K_x = (1./D) * (X.T @ X)
+    A = K_x + ridge_lambda * np.eye(n)
+    A_inv = np.linalg.pinv(A)
+
+    return A_inv
+
+
 def compute_w_init(X, y, ridge_lambda=0.):
     '''
     Arguments: 
@@ -41,18 +55,19 @@ def f_init(X_test, X, y, ridge_lambda=0.):
     return w_init, f_inits 
 
 
-def compute_w_feat(X, y, k_l, ridge_lambda=0.):
+def compute_w_feat(X, y, k_l, ridge_lambda=0., A_inv=None):
     '''
     Arguments: 
     X               :   D x n matrix of training inputs
     y               :   n-dim vector of targets
     k_l             :   feature learning update strength
     ridge_lambda    :   ridge regularization strength
+    A_inv           :   precomputed A_inv = (K_x + ridge_lambda I_n)^(-1), where K_x = (1/D) X^T X, if available
     '''
     D, n = X.shape
     K_x = (1./D) * (X.T @ X)
     A = K_x + ridge_lambda * np.eye(n)
-    A_inv = np.linalg.pinv(A)
+    A_inv = A_inv if A_inv is not None else np.linalg.pinv(A)
     w_init = (1./D**0.5) * X @ A_inv @ y
     # w_init = compute_w_init(X, y, ridge_lambda)
     beta = k_l * D / n**2
@@ -66,9 +81,21 @@ def compute_w_feat(X, y, k_l, ridge_lambda=0.):
     return w_feat
 
 
-def compute_gen_error(w_star, Sigma, X, y, k_l=0., ridge_lambda=0.):
+
+def compute_gen_error(w_star, Sigma, X, y, k_l=0., ridge_lambda=0., A_inv=None):
+    '''
+    Arguments:
+    w_star          :   D-dim vector of true weights
+    Sigma           :   D x D covariance matrix of the input distribution
+    X               :   D x n matrix of training inputs
+    y               :   n-dim vector of targets
+    k_l             :   feature learning update strength
+    ridge_lambda    :   ridge regularization strength
+    A_inv           :   precomputed A_inv = (K_x + ridge_lambda I_n)^(-1), where K_x = (1/D) X^T X, if available
+    '''
+
     D = len(w_star)
-    w_est = compute_w_feat(X, y, k_l=k_l, ridge_lambda=ridge_lambda)
+    w_est = compute_w_feat(X, y, k_l=k_l, ridge_lambda=ridge_lambda, A_inv=A_inv)
     w_error = w_star - w_est 
     G = np.dot(w_error, Sigma @ w_error) / D 
 
