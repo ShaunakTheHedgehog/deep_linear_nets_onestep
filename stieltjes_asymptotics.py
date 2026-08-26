@@ -706,11 +706,11 @@ if __name__ == "__main__":
     # visualize_mixed_partial_at_zero(psi=0.1, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=None, save=False)
 
     # print(1./0)
-    n = 1000
-    D = 5000 
-    spike_strength = 20
-    rho = 0.07
-    noise_std = 1.0
+    n = 1500
+    D = 3000 
+    spike_strength = 10
+    rho = 0.
+    noise_std = 0.5
     # ridge_lambda = 0.1
 
     # k_ls = np.arange(0, 1.01, 0.01)
@@ -732,7 +732,7 @@ if __name__ == "__main__":
 
     k_l = 10.
     print(min_gen_error_over_lambda(n/D, spike_strength, rho, noise_std, k_l))
-    lambdas = np.arange(0., 1000., 0.01)
+    lambdas = np.arange(0., 2., 0.01)
 
     init_biases = np.zeros_like(lambdas)
     init_variances = np.zeros_like(lambdas)

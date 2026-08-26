@@ -47,13 +47,17 @@ COMBOS = [(g, r) for g in GAMMAS for r in RHOS]   # len == 18
 
 def default_config():
     return dict(D=1000, n=500, sigma=0.5, k_l=10.0, ntrials=100, seed=0,
+                use_log_spaced_lambdas=False, points_per_decade=6,
                 lambda_step=0.01, lambda_max=2.0, theory_step=0.01,
                 out_dir="new_spiked_sweep")
 
 
 def out_filename(cfg, gamma, rho):
+    tag = ""
+    if cfg["use_log_spaced_lambdas"]:
+        tag = f"_logspaced_lambdas_{cfg['points_per_decade']}ppd"
     return (f"spiked_gamma={gamma:g}_rho={rho:g}_D={cfg['D']}_n={cfg['n']}"
-            f"_sigma={cfg['sigma']:g}_kl={cfg['k_l']:g}_ntrials={cfg['ntrials']}.pkl")
+            f"_sigma={cfg['sigma']:g}_kl={cfg['k_l']:g}_ntrials={cfg['ntrials']}{tag}.pkl")
 
 
 def run_one(gamma, rho, cfg):
@@ -62,10 +66,19 @@ def run_one(gamma, rho, cfg):
     sigma, k_l = cfg["sigma"], cfg["k_l"]
     ntrials, seed = cfg["ntrials"], cfg["seed"]
     psi = n / D
+    use_log = cfg["use_log_spaced_lambdas"]
+    lambda_max = float(cfg["lambda_max"])
+    lambda_min = float(cfg["lambda_step"])
 
-    # empirical lambda grid (coarse: markers) and theory grid (fine: smooth curve)
-    lambdas = np.round(np.append(np.arange(0.0, cfg["lambda_max"], cfg["lambda_step"]),
-                                 cfg["lambda_max"]), 6)
+    if use_log:
+        assert cfg["points_per_decade"] is not None, "must specify --points-per-decade"
+        ndec = max(np.log10(lambda_max / lambda_min), 1e-9)
+        ntarget = max(2, int(np.ceil(ndec * cfg["points_per_decade"])) + 1)
+        lambdas = np.concatenate((np.array([0.0]), np.geomspace(lambda_min, lambda_max, ntarget)))
+    else:
+        # empirical lambda grid (coarse: markers) and theory grid (fine: smooth curve)
+        lambdas = np.round(np.append(np.arange(0.0, cfg["lambda_max"], cfg["lambda_step"]),
+                           cfg["lambda_max"]), 6)
     lambdas_theory = np.round(np.arange(0.0, cfg["lambda_max"] + 1e-9, cfg["theory_step"]), 6)
 
     # --- fixed problem instance (spike direction v, target w_star) ---
@@ -109,7 +122,8 @@ def run_one(gamma, rho, cfg):
 
     results = dict(
         D=D, n=n, psi=psi, rho=rho, spike_strength=gamma, noise_std=sigma,
-        k_l=k_l, ntrials=ntrials, seed=seed,
+        k_l=k_l, ntrials=ntrials, seed=seed, use_log_spaced_lambdas=use_log,
+        points_per_decade=cfg["points_per_decade"], lambda_step=cfg["lambda_step"], lambda_max=cfg["lambda_max"], theory_step=cfg["theory_step"],
         lambdas=lambdas, lambdas_theory=lambdas_theory,
         init_gen_errors=init_mean, feat_gen_errors=feat_mean,
         init_gen_errors_sem=init_sem, feat_gen_errors_sem=feat_sem,
@@ -129,8 +143,8 @@ def run_one(gamma, rho, cfg):
 
 def build_config(args):
     cfg = default_config()
-    for key in ("D", "n", "sigma", "k_l", "ntrials", "seed",
-                "lambda_step", "lambda_max", "theory_step", "out_dir"):
+    for key in ("D", "n", "sigma", "k_l", "ntrials", "seed", "use_log_spaced_lambdas",
+                "points_per_decade", "lambda_step", "lambda_max", "theory_step", "out_dir"):
         val = getattr(args, key, None)
         if val is not None:
             cfg[key] = val
@@ -152,6 +166,8 @@ def main():
     p.add_argument("--k_l", type=float, default=None)
     p.add_argument("--ntrials", type=int, default=None)
     p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--use-log-spaced-lambdas", dest="use_log_spaced_lambdas", action="store_true")
+    p.add_argument("--points-per-decade", dest="points_per_decade", type=int, default=None)
     p.add_argument("--lambda-step", dest="lambda_step", type=float, default=None)
     p.add_argument("--lambda-max", dest="lambda_max", type=float, default=None)
     p.add_argument("--theory-step", dest="theory_step", type=float, default=None)
