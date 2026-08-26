@@ -25,6 +25,7 @@ import re
 import glob
 import pickle
 
+from matplotlib.ticker import MaxNLocator, FuncFormatter
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -46,7 +47,13 @@ INIT_COLOR = "#E05C5C"   # red  : baseline  f_init
 FEAT_COLOR = "#0072B2"   # blue  : feature-learning  f_feat  (colourblind-safe)
 
 # per-k_l colours for the c_lambda line plots (colourblind-safe)
-KL_COLORS = {0.0: "#6E6E6E", 1.0: "#0072B2", 10.0: "#D55E00"}
+# KL_COLORS = {0.0: "#6E6E6E", 1.0: "#0072B2", 10.0: "#D55E00"}
+
+# make a plt.cm.cool colormap that starts at one end when k_l = 0 and is at the other end when k_l = 10
+KL_CMAP = plt.cm.cool
+KL_COLORS = {k_l: KL_CMAP(1. - k_l / 10.0) for k_l in [0.0, 0.5, 1.0, 5.0, 10.0]}
+
+
 
 
 def set_paper_style():
@@ -319,7 +326,7 @@ def _theory_on_grid(d, lam_grid):
 def plot_single_run_scaled(pkl_path, xscale="symlog", markers_per_decade=6,
                            marker_lambda_spacing=0.08, upper_lambda=None,
                            ymax=None, show_scale_in_title=True,
-                           out_dir=None, save_stem=None):
+                           out_dir=None, save_stem=None, use_me=True):
     """
     G vs lambda for one saved run, with a selectable x-scale:
       'linear' -- as before (uniform marker spacing in lambda)
@@ -337,6 +344,8 @@ def plot_single_run_scaled(pkl_path, xscale="symlog", markers_per_decade=6,
     sigma, k_l = d["noise_std"], d.get("k_l")
     gamma, rho = d["spike_strength"], d["rho"]
     psi = n / D
+    already_using_log = d.get("use_log_spaced_lambdas", False)
+    print(f'Already using log-spaced lambdas? {already_using_log}')
 
     lam = d["lambdas"]
     if upper_lambda is None:
@@ -353,17 +362,19 @@ def plot_single_run_scaled(pkl_path, xscale="symlog", markers_per_decade=6,
             lam_th = np.unique(np.concatenate([np.linspace(0.0, lam_lo, 1000), lam_th]))
         th_i, th_f = _theory_on_grid(d, lam_th)
 
+    me = 1
     # ---- marker indices ----
     if xscale == "linear":
         step = float(np.median(np.diff(lam))) if len(lam) > 1 else marker_lambda_spacing
         me = max(1, round(marker_lambda_spacing / step))
     else:
-        me = list(_log_marker_indices(lam, markers_per_decade, lam_lo))
-        # symlog displays lambda = 0, so mark that simulated point too (pure log
-        # cannot show it). At lambda = 0 we have c_lambda = 1 exactly, so the init
-        # and feat markers coincide -- which is the point worth showing.
-        if xscale == "symlog" and lam[0] == 0.0 and 0 not in me:
-            me = [0] + me
+        if use_me:
+            me = list(_log_marker_indices(lam, markers_per_decade, lam_lo))
+            # symlog displays lambda = 0, so mark that simulated point too (pure log
+            # cannot show it). At lambda = 0 we have c_lambda = 1 exactly, so the init
+            # and feat markers coincide -- which is the point worth showing.
+            if xscale == "symlog" and lam[0] == 0.0 and 0 not in me:
+                me = [0] + me
 
     fig, ax = plt.subplots(figsize=(5.2, 4.2))
     ax.plot(lam_th, th_i, color=INIT_COLOR, zorder=3)
@@ -425,8 +436,9 @@ def plot_single_run_scaled(pkl_path, xscale="symlog", markers_per_decade=6,
     fig.tight_layout()
     if save_stem is None:
         save_stem = f"G_gamma={gamma:g}_rho={rho:g}_D={D}_n={n}_sigma={sigma:g}_{xscale}"
-        if ymax is not None:
-            save_stem += f"_ymax{ymax:g}"
+
+        if already_using_log:
+            save_stem += "_loglam"
     target = out_dir or OUT_DIR
     os.makedirs(target, exist_ok=True)
     for ext in ("pdf", "png"):
@@ -618,12 +630,13 @@ def plot_c_lambda_lines(pkl_path, mark_every_lambda=0.1, upper_lambda=None,
     marker_cycle = ["o", "s", "D", "^", "v"]
     for a, k_l in enumerate(k_ls):
         color = _kl_color(float(k_l), a)
+        print(d['c_emp_sem'][a])
         ax.plot(lam, d["c_theory"][a], color=color, zorder=3)
         ax.errorbar(lam, d["c_emp_mean"][a], yerr=d["c_emp_sem"][a], linestyle="none",
                     marker=marker_cycle[a % len(marker_cycle)], markersize=4.5,
                     markerfacecolor="none", markeredgecolor=color, markeredgewidth=1.0,
                     ecolor=color, elinewidth=0.9, capsize=2.0,
-                    markevery=me, errorevery=me, zorder=4)
+                    markevery=me, errorevery=me, zorder=5)
 
     ax.axhline(1.0, color="0.6", lw=0.8, ls=":", zorder=1)  # c_lambda = 1 floor
     ax.set_xlim(0, upper_lambda)
@@ -634,17 +647,24 @@ def plot_c_lambda_lines(pkl_path, mark_every_lambda=0.1, upper_lambda=None,
     title = rf"$\gamma={gamma:g}$, $\rho={rho:g}$"
     ax.set_title(title)
 
+    ax.tick_params(axis='both', labelsize=16)
+
     # legend: one colour entry per k_l, plus theory/sim style key
     handles = [Line2D([0], [0], color=_kl_color(float(k_l), a),
                       marker=marker_cycle[a % len(marker_cycle)], markerfacecolor="none",
                       label=rf"$k_\ell={k_l:g}$")
                for a, k_l in enumerate(k_ls)]
-    handles += [
-        Line2D([0], [0], color="0.2", label="theory"),
-        Line2D([0], [0], color="0.2", marker="o", markerfacecolor="none",
-               linestyle="none", label=r"sim. ($\pm$s.e.m.)"),
-    ]
-    ax.legend(handles=handles, frameon=False, loc="upper left", ncol=1)
+    # handles += [
+    #     Line2D([0], [0], color="0.2", label="theory"),
+    #     Line2D([0], [0], color="0.2", marker="o", markerfacecolor="none",
+    #            linestyle="none", label=r"sim. ($\pm$s.e.m.)"),
+    # ]
+    fig_legend = plt.figure(figsize=(10.4, 1.8))
+    fig_legend.legend(handles=handles, loc="center", frameon=True, framealpha=0.92,
+                    edgecolor="0.7", fontsize=14, ncol=1)
+    _savefig(fig_legend, f"c_lambda_plot_legend")
+    plt.close(fig_legend)
+    # ax.legend(handles=handles, frameon=False, loc="upper left", ncol=1)
 
     caption = (rf"$\psi={psi:g}$, $D={D}$, $n={n}$, $\sigma={sigma:g}$; "
                rf"{ntrials} draws; seed$={seed}$. Markers every "
@@ -678,8 +698,22 @@ def plot_c_lambda_heatmap(pkl_path, cmap="viridis", vmin=1.0, vmax=None, save_st
     fig, ax = plt.subplots(figsize=(5.6, 4.4))
     pcm = ax.pcolormesh(lam, k_ls, C, cmap=cmap, vmin=vmin, vmax=vmax,
                         shading="gouraud")
+
+    # set ax tick size
+    ax.tick_params(axis='both', labelsize=16)
+    
     cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
     cbar.set_label(r"$c_\lambda$")
+
+    # set tick labels font size
+    cbar.ax.tick_params(labelsize=16)
+
+    # allow for at most 4 or 5 ticks on cbar
+    cbar.locator = MaxNLocator(nbins=5)
+
+    # set cbar ticks manually
+    cbar.set_ticks(np.array([1.0, 1.5, 2.0, 2.5]))
+    
 
     ax.set_xlabel(r"ridge $\lambda$")
     ax.set_ylabel(r"$k_\ell$")
@@ -1195,6 +1229,18 @@ def _savefig(fig, stem):
 
 
 if __name__ == "__main__":
+    plot_single_run_scaled("new_spiked_sweep/spiked_gamma=10_rho=0_D=3000_n=1500_sigma=1_kl=10_ntrials=100.pkl", xscale="symlog")
+    plot_single_run_scaled("new_spiked_sweep/spiked_gamma=0_rho=0_D=3000_n=1500_sigma=1_kl=10_ntrials=100.pkl", xscale="symlog")
+    print(1/0)
+
+    # plot_c_lambda_heatmap('c_lambda_data/c_lambda_heatmap_gamma=0_rho=0_D=1000_n=500_sigma=0.5.pkl', cmap="cool_r", vmin=1.0, vmax=None, save_stem=None)
+    # plot_c_lambda_heatmap('c_lambda_data/c_lambda_heatmap_gamma=10_rho=0.6_D=1000_n=500_sigma=0.5.pkl', cmap="cool_r", vmin=1.0, vmax=None, save_stem=None)
+    plot_c_lambda_lines('c_lambda_data/c_lambda_lines_gamma=0_rho=0_D=1000_n=500_sigma=0.5_ntrials=100.pkl', mark_every_lambda=0.5, upper_lambda=None,
+                        ylim=None, save_stem=None)
+    plot_c_lambda_lines('c_lambda_data/c_lambda_lines_gamma=10_rho=0.6_D=1000_n=500_sigma=0.5_ntrials=100.pkl', mark_every_lambda=0.5, upper_lambda=None,
+                            ylim=None, save_stem=None)
+    print(1./0)
+
     # plot_single_run('new_spiked_sweep/spiked_gamma=0.25_rho=1_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=3, upper_lambda=None,
     #                     save_stem=None)
     # plot_single_run('new_spiked_sweep/spiked_gamma=15_rho=0.1_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.25, upper_lambda=None,
@@ -1211,8 +1257,8 @@ if __name__ == "__main__":
     # plot_isotropic()
     # plot_all_snr_phase()
     plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=20_snrmax=1_gammastep=0.1_snrstep=0.001.pkl"), 
-                           gamma_range=(19., 20.), snr_range=(0., 0.02), 
-                           save=False, have_legend=False)
+                           # gamma_range=(19., 20.), snr_range=(0., 0.02), 
+                           save=True, have_legend=False)
     print(1/0)
 
     base = 'new_spiked_sweep/spiked_{}_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl'

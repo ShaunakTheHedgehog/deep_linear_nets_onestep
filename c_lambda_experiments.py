@@ -40,13 +40,13 @@ OUT_DIR = os.path.join(HERE, "c_lambda_data")
 # ---- experiment settings ---------------------------------------------------
 LINE_CONFIGS = [(0.0, 0.0), (10.0, 0.6)]        # (gamma, rho) for plots 1 & 2
 HEATMAP_CONFIGS = [(0.0, 0.0), (10.0, 0.6)]     # (gamma, rho) for plot 3 (one each)
-K_LS = [0.0, 1.0, 10.0]
+K_LS = [0.0, 0.5, 1.0, 5.0, 10.0]
 
 
 def default_config():
     return dict(D=1000, n=500, sigma=0.5, ntrials=100, seed=0,
-                lambda_max=2.0, lambda_step=0.01,            # line plots
-                heat_lambda_max=1.0, heat_lambda_step=0.01,  # heatmap
+                lambda_max=10.0, lambda_step=0.01,            # line plots
+                heat_lambda_max=10.0, heat_lambda_step=0.01,  # heatmap
                 heat_kl_max=10.0, heat_kl_step=0.1)
 
 
@@ -109,6 +109,7 @@ def compute_c_lambda_line_data(gamma, rho, cfg, k_ls=K_LS, out_dir=OUT_DIR):
             q1, q2 = _quadratic_forms(X, y, lam, D, n)
             for a, k_l in enumerate(k_ls):
                 c_trials[t, a, j] = _c_lambda_from_forms(lam, k_l, q1, q2, D, n)
+        print(f'Trial {t + 1}/{ntrials} done', flush=True)
 
     c_emp_mean = c_trials.mean(axis=0)
     c_emp_sem = c_trials.std(axis=0, ddof=1) / np.sqrt(ntrials)
@@ -159,10 +160,10 @@ def compute_c_lambda_heatmap_data(gamma, rho, cfg, out_dir=OUT_DIR):
 
 def main():
     cfg = default_config()
-    for gamma, rho in LINE_CONFIGS:
-        compute_c_lambda_line_data(gamma, rho, cfg)
     for gamma, rho in HEATMAP_CONFIGS:
         compute_c_lambda_heatmap_data(gamma, rho, cfg)
+    for gamma, rho in LINE_CONFIGS:
+        compute_c_lambda_line_data(gamma, rho, cfg)
 
 
 if __name__ == "__main__":
