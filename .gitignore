@@ -15,6 +15,7 @@ venv/
 
 # Code files
 deep_nn_experiments.py
+two_layer_analysis.py
 
 # Plots / figures
 *.png
