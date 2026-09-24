@@ -13,6 +13,9 @@ venv/
 *.h5
 *.hdf5
 
+# Code files
+deep_nn_experiments.py
+
 # Plots / figures
 *.png
 *.jpg
