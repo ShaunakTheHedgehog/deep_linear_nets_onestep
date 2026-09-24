@@ -706,12 +706,18 @@ if __name__ == "__main__":
     # visualize_mixed_partial_at_zero(psi=0.1, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=None, save=False)
 
     # print(1./0)
-    n = 1500
-    D = 3000 
-    spike_strength = 10
-    rho = 0.
+    n = 500
+    D = 1000 
+    # spike_strength = 1
+    # rho = 0.2
     noise_std = 0.5
     # ridge_lambda = 0.1
+    k_l = 10.
+
+    for gamma in [1., 3., 10.]:
+        for rho in [0., 0.2, 0.4, 0.6, 0.8, 1.0]:
+            print(min_gen_error_over_lambda(n/D, gamma, rho, noise_std, 0.))
+            print(min_gen_error_over_lambda(n/D, gamma, rho, noise_std, k_l))
 
     # k_ls = np.arange(0, 1.01, 0.01)
     # spacing = 0.01
@@ -730,52 +736,50 @@ if __name__ == "__main__":
     # depth_lambda_dG_dk_heatmap(n, D, spike_strength, rho, noise_std)
     # # print(1./0)
 
-    k_l = 10.
-    print(min_gen_error_over_lambda(n/D, spike_strength, rho, noise_std, k_l))
-    lambdas = np.arange(0., 2., 0.01)
+            lambdas = np.arange(0., 1000., 0.01)
 
-    init_biases = np.zeros_like(lambdas)
-    init_variances = np.zeros_like(lambdas)
-    init_gen_errors = np.zeros_like(lambdas)
+            init_biases = np.zeros_like(lambdas)
+            init_variances = np.zeros_like(lambdas)
+            init_gen_errors = np.zeros_like(lambdas)
 
-    feat_biases = np.zeros_like(lambdas)
-    feat_variances = np.zeros_like(lambdas)
-    feat_gen_errors = np.zeros_like(lambdas)
+            feat_biases = np.zeros_like(lambdas)
+            feat_variances = np.zeros_like(lambdas)
+            feat_gen_errors = np.zeros_like(lambdas)
 
 
-    for i in range(len(lambdas)):
-        ridge_lambda = lambdas[i]
-        # init_bias, init_variance, init_gen_error = compute_linear_model_bias_and_variance(n, D, ridge_lambda, noise_std)
-        init_bias, init_variance, init_gen_error = compute_spiked_covariance_model_bias_and_variance(n, D, 0., ridge_lambda, spike_strength, rho, noise_std)
+            for i in range(len(lambdas)):
+                ridge_lambda = lambdas[i]
+                # init_bias, init_variance, init_gen_error = compute_linear_model_bias_and_variance(n, D, ridge_lambda, noise_std)
+                init_bias, init_variance, init_gen_error = compute_spiked_covariance_model_bias_and_variance(n, D, 0., ridge_lambda, gamma, rho, noise_std)
 
-        init_biases[i] = init_bias
-        init_variances[i] = init_variance 
-        init_gen_errors[i] = init_gen_error 
+                init_biases[i] = init_bias
+                init_variances[i] = init_variance 
+                init_gen_errors[i] = init_gen_error 
 
-        # feat_bias, feat_variance, feat_gen_error = compute_feature_learning_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, noise_std)
-        feat_bias, feat_variance, feat_gen_error = compute_spiked_covariance_model_bias_and_variance(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std)
+                # feat_bias, feat_variance, feat_gen_error = compute_feature_learning_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, noise_std)
+                feat_bias, feat_variance, feat_gen_error = compute_spiked_covariance_model_bias_and_variance(n, D, k_l, ridge_lambda, gamma, rho, noise_std)
 
-        feat_biases[i] = feat_bias
-        feat_variances[i] = feat_variance 
-        feat_gen_errors[i] = feat_gen_error 
+                feat_biases[i] = feat_bias
+                feat_variances[i] = feat_variance 
+                feat_gen_errors[i] = feat_gen_error 
 
-    plt.figure()
-    # plt.plot(lambdas, init_biases, color='gray', lw=2., linestyle='dashed', label='Bias')
-    # plt.plot(lambdas, init_variances, color='gray', lw=2., linestyle='dotted', label='Variance')
-    plt.plot(lambdas, init_gen_errors, color='gray', lw=2.5, label='Generalization Error')
+            plt.figure()
+            # plt.plot(lambdas, init_biases, color='gray', lw=2., linestyle='dashed', label='Bias')
+            # plt.plot(lambdas, init_variances, color='gray', lw=2., linestyle='dotted', label='Variance')
+            plt.plot(lambdas, init_gen_errors, color='gray', lw=2.5, label='Generalization Error')
 
-    # plt.plot(lambdas, feat_biases, color='royalblue', lw=2., linestyle='dashed', label='Bias')
-    # plt.plot(lambdas, feat_variances, color='royalblue', lw=2., linestyle='dotted', label='Variance')
-    plt.plot(lambdas, feat_gen_errors, color='royalblue', lw=2.5, label='Generalization Error')
+            # plt.plot(lambdas, feat_biases, color='royalblue', lw=2., linestyle='dashed', label='Bias')
+            # plt.plot(lambdas, feat_variances, color='royalblue', lw=2., linestyle='dotted', label='Variance')
+            plt.plot(lambdas, feat_gen_errors, color='royalblue', lw=2.5, label='Generalization Error')
 
-    # plot blue and green stars at minimum of generalization error for init and feat learn, respectively
-    plt.scatter(lambdas[np.argmin(init_gen_errors)], np.min(init_gen_errors), color='gray', marker='o', s=50, label='Init Min Gen Error')
-    plt.scatter(lambdas[np.argmin(feat_gen_errors)], np.min(feat_gen_errors), color='royalblue', marker='o', s=50, label='Feat Learn Min Gen Error')
-    # plt.ylim(0, 0.65)
-    plt.xlabel('Ridge Regularization Strength')
-    # plt.legend()
-    plt.show()
-    # plt.savefig(f'bias_variance_plots/n={n}_D={D}_psi={n/D:.2f}_rho={rho}_gamma={spike_strength}_noise={noise_std}.pdf', bbox_inches='tight')
+            # plot blue and green stars at minimum of generalization error for init and feat learn, respectively
+            plt.scatter(lambdas[np.argmin(init_gen_errors)], np.min(init_gen_errors), color='gray', marker='o', s=50, label='Init Min Gen Error')
+            plt.scatter(lambdas[np.argmin(feat_gen_errors)], np.min(feat_gen_errors), color='royalblue', marker='o', s=50, label='Feat Learn Min Gen Error')
+            # plt.ylim(0, 0.65)
+            plt.xlabel('Ridge Regularization Strength')
+            # plt.legend()
+            plt.show()
+            # plt.savefig(f'bias_variance_plots/n={n}_D={D}_psi={n/D:.2f}_rho={rho}_gamma={spike_strength}_noise={noise_std}.pdf', bbox_inches='tight')
 
-    print(f'Init min gen error: {np.min(init_gen_errors)} at lambda={lambdas[np.argmin(init_gen_errors)]}')
-    print(f'Feat learn min gen error: {np.min(feat_gen_errors)} at lambda={lambdas[np.argmin(feat_gen_errors)]}')
+            print(f'Init min gen error: {np.min(init_gen_errors)} at lambda={lambdas[np.argmin(init_gen_errors)]}')
+            print(f'Feat learn min gen error: {np.min(feat_gen_errors)} at lambda={lambdas[np.argmin(feat_gen_errors)]}')
