@@ -54,72 +54,6 @@ def mp_stieltjes_derivative(z, c):
     return m_prime
 
 
-def compute_linear_model_bias_and_variance(n, D, ridge_lambda, noise_std):
-    """
-    Computes the bias, variance, and generalization error of the baseline linear model
-    in the proportional asymptotics regime using the MP Stieltjes transform.
-    """
-    psi = n / D
-    if psi >= 1:
-        raise ValueError("This function only supports the overparameterized regime (psi < 1).")
-
-    mp_stieltjes = mp_stieltjes_transform(-ridge_lambda, psi)
-    mp_steltjes_prime = mp_stieltjes_derivative(-ridge_lambda, psi)
-
-    alpha_1 = psi * (1 - ridge_lambda * mp_stieltjes)
-    alpha_2 = psi * (mp_stieltjes - ridge_lambda * mp_steltjes_prime)
-
-    noise_1 = psi * mp_stieltjes * noise_std**2
-    noise_2 = psi * mp_steltjes_prime * noise_std**2
-
-    bias = (1 - alpha_1)**2 
-    variance = alpha_1 - alpha_1**2 - ridge_lambda * alpha_2 + noise_1 - ridge_lambda * noise_2 
-    gen_error = bias + variance
-
-    bias = bias.real
-    variance = variance.real
-    gen_error = gen_error.real
-
-    return bias, variance, gen_error
-
-
-# def compute_feature_learning_model_bias_and_variance(n, D, beta_coeff, ridge_lambda, noise_std):
-#     """
-#     Computes the bias, variance, and generalization error of the feature learning model
-#     in the proportional asymptotics regime using the MP Stieltjes transform.
-#     """
-#     psi = n / D
-#     k = beta_coeff
-#     if psi >= 1:
-#         raise ValueError("This function only supports the overparameterized regime (psi < 1).")
-
-#     mp_stieltjes = mp_stieltjes_transform(-ridge_lambda, psi)
-#     mp_steltjes_prime = mp_stieltjes_derivative(-ridge_lambda, psi)
-
-#     alpha_1 = psi * (1 - ridge_lambda * mp_stieltjes)
-#     alpha_2 = psi * (mp_stieltjes - ridge_lambda * mp_steltjes_prime)
-
-#     noise_1 = psi * mp_stieltjes * noise_std**2
-#     noise_2 = psi * mp_steltjes_prime * noise_std**2
-
-#     y_norm_term = 1 + noise_std**2
-#     y_trace_term = 1 - ridge_lambda * mp_stieltjes + (noise_std**2)*mp_stieltjes
-
-#     num = (ridge_lambda * k / psi) * (y_norm_term - ridge_lambda * y_trace_term)
-#     denom = 1 + k * (1 + ((1 + noise_std**2) / psi) - (ridge_lambda * y_norm_term / psi) + (ridge_lambda**2 / psi) * y_trace_term ) 
-#     c_lambda = 1. + (num / denom)
-
-#     bias = (1 - c_lambda * alpha_1)**2
-#     variance = (c_lambda**2) * (alpha_1 - alpha_1**2 - ridge_lambda * alpha_2 + noise_1 - ridge_lambda * noise_2)
-#     gen_error = bias + variance
-
-#     bias = bias.real
-#     variance = variance.real
-#     gen_error = gen_error.real
-
-#     return bias, variance, gen_error
-
-
 def compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, spike_strength, rho, noise_std):
     psi = n / D
     gamma = spike_strength 
@@ -135,14 +69,8 @@ def compute_spiked_covariance_intermediate_quantities(n, D, k_l, ridge_lambda, s
     a = tau_1
     b = gamma * tau_1 * (1 - tau_1) / (1 + gamma * tau_1)  #1 - tau_1 - (1. / (1./(1 - tau_1) + gamma * psi * mp_stieltjes))
 
-    # T1 = gamma * psi * mp_stieltjes + (tau_1 / (1. - tau_1))
-    # T2 = gamma * psi * mp_steltjes_prime + (tau_2 / ((1 - tau_1)**2))
-
     a_tilde = tau_2
-    b_tilde = tau_2 * ( (gamma + 1)/((1 + gamma * tau_1)**2) - 1 )  #(T2 / (1 + T1)**2) - tau_2 
-
-    # noise_1 = psi * mp_stieltjes * noise_std**2
-    # noise_2 = psi * mp_steltjes_prime * noise_std**2
+    b_tilde = tau_2 * ( (gamma + 1)/((1 + gamma * tau_1)**2) - 1 )  
 
     y_norm_term = 1 + noise_std**2 + gamma * rho**2
     y_resolvent_term = ((a + b * rho**2) / psi) + (noise_std**2)*mp_stieltjes
@@ -212,8 +140,6 @@ def compute_spiked_covariance_dG_dc(n, D, k_l, ridge_lambda, spike_strength, rho
     b = vars['b']
     a_tilde = vars['a_tilde']
     b_tilde = vars['b_tilde']
-    # noise_1 = vars['noise_1']
-    # noise_2 = vars['noise_2']
     c_lambda = vars['c_lambda']
     c_num_term = vars['c_num_term']
     c_denom = vars['c_denom']
@@ -258,9 +184,7 @@ def visualize_mixed_partial_at_zero(psi, gammas, rhos, noise_stds, ylim=None, sa
         gamma: list of spike strengths
         rhos: array of alignment values, or a single float
         noise_stds: array of noise standard deviations, or a single float
-    '''
-    # add description
-    
+    '''    
     # assert that either rhos and noise_stds are 1d arrays of the same length OR one of them is a float scalar
     assert (isinstance(rhos, (float, int)) or isinstance(noise_stds, (float, int)) or (len(rhos) == len(noise_stds)))
 
@@ -272,9 +196,8 @@ def visualize_mixed_partial_at_zero(psi, gammas, rhos, noise_stds, ylim=None, sa
     # sample colors from a nice smooth colormap for gammas
     colors = plt.cm.viridis(np.linspace(0, 1, len(gammas)))
 
-    # make a beautiful, paper-ready ML theory style plot of SNRs against dG_dlambda_dks
-    # make the plot grid style white, with grid lines in light gray, and the axes spines in black
-    # make sure to label the point where each curve crosses the x-axis
+    # create a plot of SNRs against dG_dlambda_dks
+    # we label the point where each curve crosses the x-axis
     fig, ax = plt.subplots(figsize=(8, 6.5))
     ax.set_facecolor('white')
     ax.grid(True, color='lightgray', linestyle='--')
@@ -352,27 +275,6 @@ def depth_lambda_dG_dk_heatmap(n, D, spike_strength, rho, noise_std):
     print(f'Min derivative: {dG_dks.min()}')
 
 
-def explore_depth_effect_on_gen_error(n, D, ridge_lambda, spike_strength, rho, noise_std):
-    # L = 50
-    # layers = np.arange()
-    # c_ls = np.arange()
-
-    ks = np.arange(0, 10.01, 0.01) #10.
-
-    _, _, feat_gen_errors = compute_spiked_covariance_model_bias_and_variance(n, D, ks, ridge_lambda, spike_strength, rho, noise_std)
-
-    plt.figure()
-    plt.plot(ks, feat_gen_errors, lw=2.4)
-    plt.xlabel('Feature Learning Update Strength ($k_\\ell$)')
-    plt.ylabel('Generalization Error')
-    plt.show()
-
-    return
-
-def generate_gen_error_advantage_curve():
-    return
-
-
 # ---------------------------------------------------------------------------
 # SNR phase diagram: Delta* = min_lambda G_feat - min_lambda G_init over (gamma, rho^2/sigma^2)
 # ---------------------------------------------------------------------------
@@ -383,19 +285,6 @@ def _gen_error_at_lambda(ridge_lambda, psi, gamma, rho, sigma, k_l):
     _, _, G = compute_spiked_covariance_model_bias_and_variance(
         n_ref, D_ref, k_l, ridge_lambda, gamma, rho, sigma)
     return float(G)
-
-def _gen_error_at_lambda_with_u(u, psi, gamma, rho, sigma, k_l):
-    ridge_lambda = _convert_u_to_lambda(u)
-    return _gen_error_at_lambda(ridge_lambda, psi, gamma, rho, sigma, k_l)
-
-
-def _convert_lambda_to_u(ridge_lambda):
-    """Convert ridge lambda to u = lambda / (1 + lambda) in [0, 1)."""
-    return ridge_lambda / (1. + ridge_lambda)
-
-def _convert_u_to_lambda(u):
-    """Convert u = lambda / (1 + lambda) in [0, 1) to ridge lambda."""
-    return u / (1. - u)
 
 
 def _local_min_indices(v):
@@ -566,6 +455,7 @@ def _verify_min_finder_varying_rho(psi, sigma, k_l, cells, lambda_max, n_dense=2
             G_dense = min(_gen_error_at_lambda(l, psi, gamma, rho, sigma, kl) for l in dense)
             worst = max(worst, G_fast - G_dense)
     return worst
+
 
 def _verify_min_finder_varying_sigma(psi, rho, k_l, cells, lambda_max, n_dense=20_000, rng_seed=0):
     """
