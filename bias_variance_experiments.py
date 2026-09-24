@@ -1,4 +1,6 @@
 """
+Code file generated using Claude code, and reviewed by SB.
+
 bias_variance_experiments.py — bias/variance/gen-error data for the B-V-G figures.
 
 The saved sweep pkls only store *empirical generalization error*; empirical bias
@@ -145,7 +147,7 @@ def run_one(gamma, rho, cfg, out_dir=OUT_DIR):
     )
     os.makedirs(out_dir, exist_ok=True)
     fname = (f"bias_variance_gamma={gamma:g}_rho={rho:g}_D={D}_n={n}"
-             f"_sigma={sigma:g}_kl={k_l:g}_ntrials={ntrials}.pkl")
+             f"_sigma={sigma:g}_kl={k_l:g}_ntrials={ntrials}_NEW.pkl")
     path = os.path.join(out_dir, fname)
     with open(path, "wb") as f:
         pkl.dump(results, f)
