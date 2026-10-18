@@ -30,7 +30,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from stieltjes_asymptotics import min_gen_error_over_lambda
+from stieltjes_asymptotics import min_gen_error_over_lambda, visualize_mixed_partial_at_zero
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -91,6 +91,7 @@ def load_spiked_runs(directory=None):
     Prefers the clean parallel sweep in spiked_sweep/ (new schema with a dense
     theory grid + s.e.m.); falls back to the legacy spiked_covariance_experiments/.
     """
+    print(f'Directory: {directory}')
     if directory is None:
         directory = SWEEP_DIR if glob.glob(os.path.join(SWEEP_DIR, "spiked_*.pkl")) else SPIKED_DIR
     runs = {}
@@ -163,7 +164,7 @@ def _tight_ylim_with_headroom(ax, xlim_max, series, bottom_pad_frac=0.06,
 
 
 # ---- F1: G vs lambda, theory vs simulation, across (gamma, rho) -------------
-def plot_f1_grid(gammas=None, rhos=None, markevery=8,
+def plot_f1_grid(gammas=None, rhos=None, directory=None, markevery=8,
                  save_stem="F1_spiked_gen_error", upper_lambda=1.0):
     """
     Small-multiples grid: rows = gamma, cols = rho. Per panel, four series:
@@ -171,7 +172,7 @@ def plot_f1_grid(gammas=None, rhos=None, markevery=8,
     Shared y-axis within each row so cross-panel comparison is honest.
     """
     set_paper_style()
-    runs, directory = load_spiked_runs()
+    runs, directory = load_spiked_runs(directory)
     if not runs:
         raise FileNotFoundError(f"No spiked .pkl runs found in {SWEEP_DIR} or {SPIKED_DIR}")
 
@@ -235,6 +236,11 @@ def plot_f1_grid(gammas=None, rhos=None, markevery=8,
 
             ax.set_xlim(0, upper_lambda)
 
+            # set tick font size
+            ax.tick_params(axis='both', labelsize=17)
+            # each y axis has at most 4 ticks
+            # ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune='both'))
+
             # tight, per-panel y-limits around only the curves visible in [0, upper_lambda],
             # with headroom reserved at the top so the SNR annotation never sits on a curve
             init_lo = d["init_gen_errors"] - (init_sem if init_sem is not None else 0.0)
@@ -248,10 +254,10 @@ def plot_f1_grid(gammas=None, rhos=None, markevery=8,
             )
 
             # SNR annotation (rho^2 / sigma^2), placed in the reserved headroom band
-            snr = (r ** 2) / (sigma ** 2)
-            ax.text(0.96, annot_y, rf"$\rho^2/\sigma^2={snr:.2g}$",
-                    ha="right", va="center", transform=ax.transAxes, fontsize=9.5,
-                    bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.7))
+            # snr = (r ** 2) / (sigma ** 2)
+            # ax.text(0.96, annot_y, rf"$\rho^2/\sigma^2={snr:.2g}$",
+            #         ha="right", va="center", transform=ax.transAxes, fontsize=9.5,
+            #         bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.7))
 
             ax.margins(x=0.02)
             if i == 0:
@@ -326,7 +332,8 @@ def _theory_on_grid(d, lam_grid):
 def plot_single_run_scaled(pkl_path, xscale="symlog", markers_per_decade=6,
                            marker_lambda_spacing=0.08, upper_lambda=None,
                            ymax=None, show_scale_in_title=True,
-                           out_dir=None, save_stem=None, use_me=True):
+                           out_dir=None, save_stem=None, use_me=True,
+                           yticks=None, ylims=None):
     """
     G vs lambda for one saved run, with a selectable x-scale:
       'linear' -- as before (uniform marker spacing in lambda)
@@ -432,6 +439,10 @@ def plot_single_run_scaled(pkl_path, xscale="symlog", markers_per_decade=6,
         title += rf"  [{xscale}]"
     ax.set_title(title)
     ax.tick_params(axis='both', labelsize=18)
+    if yticks is not None:
+        ax.set_yticks(yticks)
+    if ylims is not None:
+        ax.set_ylim(ylims)
 
     fig.tight_layout()
     if save_stem is None:
@@ -785,7 +796,7 @@ _BV_QUANTITIES = [
 ]
 
 
-def plot_bias_variance(pkl_path, mark_every_lambda=0.1, upper_lambda=None, save_stem=None):
+def plot_bias_variance(pkl_path, mark_every_lambda=0.05, upper_lambda=None, save_stem=None, ylims=None, yticks=None):
     """
     Bias, variance, and generalization error vs lambda: theory (lines) + empirics
     (markers), for baseline (k_l=0) and feature-learning (k_l) estimators.
@@ -807,42 +818,53 @@ def plot_bias_variance(pkl_path, mark_every_lambda=0.1, upper_lambda=None, save_
     ntrials, seed = d.get("ntrials", "?"), d.get("seed", "?")
 
     fig, ax = plt.subplots(figsize=(6.0, 4.6))
-    estimators = [("init", INIT_COLOR, rf"$k_\ell=0$"),
-                  ("feat", FEAT_COLOR, rf"$k_\ell={k_l:g}$")]
+    estimators = [("init", INIT_COLOR, rf"$k_\ell=0$", 0.),
+                  ("feat", FEAT_COLOR, rf"$k_\ell={k_l:g}$", k_l)]
 
-    for est, color, _label in estimators:
+    for est, color, _label, _k_l in estimators:
         for stem, _qlabel, ls, marker in _BV_QUANTITIES:
             y_th = d[f"{est}_{stem}_theory"]
             y_emp = d[f"{est}_{stem}_emp"]
             ax.plot(lam, y_th, color=color, linestyle=ls,
                     lw=2.0 if stem == "gen_error" else 1.6, zorder=3)
-            if stem == "gen_error":
-                ax.errorbar(lam, y_emp, yerr=d[f"{est}_gen_error_sem"], linestyle="none",
-                            marker=marker, markersize=4.3, markerfacecolor="none",
-                            markeredgecolor=color, markeredgewidth=1.0,
-                            ecolor=color, elinewidth=0.8, capsize=1.5,
-                            markevery=me, errorevery=me, zorder=4)
-            else:
-                ax.plot(lam, y_emp, linestyle="none", marker=marker, markersize=4.3,
-                        markerfacecolor="none", markeredgecolor=color,
-                        markeredgewidth=1.0, markevery=me, zorder=4)
+            # if stem == "gen_error":
+            #     ax.errorbar(lam, y_emp, yerr=d[f"{est}_gen_error_sem"], linestyle="none",
+            #                 marker=marker, markersize=4.3, markerfacecolor="none",
+            #                 markeredgecolor=color, markeredgewidth=1.0,
+            #                 ecolor=color, elinewidth=0.8, capsize=1.5,
+            #                 markevery=me, errorevery=me, zorder=4)
+            # else:
+            ax.plot(lam, y_emp, linestyle="none", marker=marker, markersize=4.3,
+                    markerfacecolor="none", markeredgecolor=color,
+                    markeredgewidth=1.0, markevery=me, zorder=4)
 
     ax.set_xlim(0, upper_lambda)
     ax.set_ylim(bottom=0.0)   # anchor at the x-axis so minima guides can reach it
 
     # highlight theory gen-error minima (both estimators): star + dotted guides
     # drawn to y=0 (the x-axis) and x=0 (the y-axis)
-    for est, color, _label in estimators:
-        G = d[f"{est}_gen_error_theory"]
-        mask = lam <= upper_lambda + 1e-9
-        idx = int(np.nanargmin(np.where(mask, G, np.inf)))
-        lstar, gstar = lam[idx], G[idx]
-        ax.plot([lstar, lstar], [0.0, gstar], color=color, ls=":", lw=1.0, zorder=2)
-        ax.plot([0, lstar], [gstar, gstar], color=color, ls=":", lw=1.0, zorder=2)
-        ax.plot([lstar], [gstar], marker="*", markersize=12, color=color,
+    for est, color, _label, _k_l in estimators:
+        # G = d[f"{est}_gen_error_theory"]
+        # mask = lam <= upper_lambda + 1e-9
+        # idx = int(np.nanargmin(np.where(mask, G, np.inf)))
+        # lstar, gstar = lam[idx], G[idx]
+        gstar, lstar = min_gen_error_over_lambda(n/D, gamma, rho, sigma, _k_l)
+        # ax.plot([lstar, lstar], [0.0, gstar], color=color, ls=":", lw=1.0, zorder=2)
+        # ax.plot([0, lstar], [gstar, gstar], color=color, ls=":", lw=1.0, zorder=2)
+        ax.plot([lstar], [gstar], marker="*", markersize=18, color=color,
                 markeredgecolor="white", markeredgewidth=0.6, zorder=6)
 
+        ax.plot([lstar], [-0.02], marker="^", markersize=5, color=color,
+                    transform=ax.get_xaxis_transform(), clip_on=False, zorder=6)
+        ax.plot([-0.02], [gstar], marker=">", markersize=5, color=color,
+                transform=ax.get_yaxis_transform(), clip_on=False, zorder=6)
+
     ax.set_xlabel(r"ridge $\lambda$")
+    ax.tick_params(axis='both', labelsize=16)
+    if ylims is not None:
+        ax.set_ylim(ylims)
+    if yticks is not None:
+        ax.set_yticks(yticks)
 
     caption = (rf"$\psi={psi:g}$, $D={D}$, $n={n}$, $\sigma={sigma:g}$, $k_\ell={k_l:g}$; "
                rf"{ntrials} draws; seed$={seed}$. $\star$ = theory $G$ minimum. "
@@ -851,7 +873,7 @@ def plot_bias_variance(pkl_path, mark_every_lambda=0.1, upper_lambda=None, save_
 
     fig.tight_layout()
     if save_stem is None:
-        save_stem = f"bias_variance_gamma={gamma:g}_rho={rho:g}"
+        save_stem = f"bias_variance_gamma={gamma:g}_rho={rho:g}_NEW"
     _savefig(fig, save_stem)
     plt.close(fig)
     return os.path.join(OUT_DIR, f"{save_stem}.pdf")
@@ -871,12 +893,12 @@ def save_bias_variance_legend(k_l=10.0, save_stem="bias_variance_legend"):
 
     fig = plt.figure(figsize=(4.2, 2.2))
     leg1 = fig.legend(handles=est_handles, frameon=False, loc="upper left",
-                      bbox_to_anchor=(0.03, 0.95), title="estimator (color)",
+                      bbox_to_anchor=(0.03, 0.95), title="Estimator",
                       alignment="left", fontsize=11, title_fontsize=10)
     fig.add_artist(leg1)
     fig.legend(handles=qty_handles, frameon=False, loc="lower left",
                bbox_to_anchor=(0.03, 0.05),
-               title="quantity  (theory: lines,  sim.: markers)",
+               title="Quantity",
                alignment="left", fontsize=11, title_fontsize=10)
     _savefig(fig, save_stem)
     plt.close(fig)
@@ -928,12 +950,16 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
     # cbar.set_label(r"$\Delta^\star = \inf_\lambda \mathcal{G}_{\mathrm{feat}}"
     #                r" - \inf_\lambda \mathcal{G}_{\mathrm{init}}$")
     cbar.ax.tick_params(labelsize=14)
-    cbar.set_label("Generalization Error Difference", fontsize=15)
+    delta_G = r"$\Delta \tilde{G}$"
+    cbar.set_label(f"Generalization Error Difference ({delta_G})", fontsize=15)
 
     # --- analytic SNR bound curves ---
     gc = np.linspace(max(gammas.min(), 1e-4), gammas.max(), 2000)
-    upper = (1 + gc * psi) ** 3 / (gc * (1 + gc) * (1 - psi) ** 3)
-    lower = (1 + gc * psi**2) / (gc * (1 - psi) ** 2)      # L_glob (corrected)
+    upper = (1 + gc * psi)**3 / (gc * (1 + gc) * (1 - psi)**3)
+    # lower = (1 + gc * psi**2) / (gc * (1 - psi) ** 2)      # L_glob (corrected)
+    # lower_plot = np.where(lower <= snr_max, lower, np.nan)
+
+    lower = (1 + gc * psi)**2 / (gc * (1 + gc) * (1 - psi)**2)  # L_new (corrected)
     lower_plot = np.where(lower <= snr_max, lower, np.nan)
 
     # find all gamma, SNR pairs where the difference is approximately zero and mark each of them with a small black dot
@@ -961,6 +987,7 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
         ax.plot(gc, np.where(upper <= snr_max, upper, np.nan),
                 color="k", lw=2.0, ls="-", zorder=5)
     ax.plot(gc, lower_plot, color="k", lw=2.0, ls="--", zorder=5)
+    # ax.plot(gc, lower_plot_new, color="k", lw=2.0, ls="-.", zorder=5)
 
     if gamma_range is not None:
         ax.set_xlim(gamma_range)
@@ -984,14 +1011,16 @@ def plot_snr_phase_diagram(pkl_path, cmap="RdBu_r", show_upper=True, save_stem=N
         if show_upper:
             handles.append(Line2D([0], [0], color="k", lw=2.0, ls="-",
                         label=r"$\rho^2/\sigma^2 = \dfrac{(1+\gamma\psi)^3}{\gamma(1+\gamma)(1-\psi)^3}$ (upper bound)"))
+        # handles.append(Line2D([0], [0], color="k", lw=2.0, ls="--",
+        #             label=r"$\rho^2/\sigma^2 =\dfrac{1+\gamma\psi^2}{\gamma(1-\psi)^2}$ (lower bound)"))
         handles.append(Line2D([0], [0], color="k", lw=2.0, ls="--",
-                    label=r"$\rho^2/\sigma^2 =\dfrac{1+\gamma\psi^2}{\gamma(1-\psi)^2}$ (lower bound)"))
+                    label=r"$\rho^2/\sigma^2 =\dfrac{(1+\gamma\psi)^2}{\gamma(1+\gamma)(1-\psi)^2}$ (lower bound)"))
         # handles.append(Patch(facecolor="none", edgecolor="0.15", hatch="/-", label="Sufficient SNR Window"))
         plt.rcParams['hatch.linewidth'] = 0.5
         handles.append(Patch(facecolor="none", edgecolor="0.5", hatch="//", label="Sufficient SNR Window"))
 
         handles.append(Line2D([0], [0], color="silver", lw=2.0, ls="dotted",
-                    label="Feature Learning \nAdvantage Threshold"))
+                    label="Feature Learning \nAdvantage Threshold"+"\n"+r"($\Delta \tilde{G} = 0$)"))
         # ax.legend(handles=handles, loc="upper right", frameon=True, framealpha=0.92,
         #           edgecolor="0.7", fontsize=10)
         # make separate file
@@ -1220,6 +1249,56 @@ def plot_joint_cap_consistency(exact_pkl, capped_pkl,
     return os.path.join(out_dir, f"{save_stem}.pdf")
 
 
+def generate_fig1(gamma_range=None, snr_range=None, save=False, have_legend=False):
+    plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=20_snrmax=1_gammastep=0.1_snrstep=0.001.pkl"), 
+                           gamma_range=gamma_range, snr_range=snr_range, 
+                           save=save, have_legend=have_legend)
+
+    # base = 'new_spiked_sweep/spiked_{}_D=5000_n=1000_sigma=1_kl=10_ntrials=100_logspaced_lambdas_6ppd.pkl'
+    # panels = [('gamma=0.25_rho=1',  None),
+    #         ('gamma=10_rho=0.5',  1.75),
+    #         ('gamma=20_rho=0.07',  None)]
+
+    # for tag, ym in panels:
+    #     plot_single_run_scaled(
+    #         base.format(tag),
+    #         xscale='symlog',
+    #         ymax=ym,
+    #         show_scale_in_title=False,
+    #         out_dir='paper_figures',
+    #         save_stem=None,
+    #     )
+
+
+def generate_fig2():
+    plot_c_lambda_heatmap('c_lambda_data/c_lambda_heatmap_gamma=0_rho=0_D=1000_n=500_sigma=0.5.pkl', cmap="cool_r", vmin=1.0, vmax=None, save_stem=None)
+    plot_c_lambda_heatmap('c_lambda_data/c_lambda_heatmap_gamma=10_rho=0.6_D=1000_n=500_sigma=0.5.pkl', cmap="cool_r", vmin=1.0, vmax=None, save_stem=None)
+    plot_c_lambda_lines('c_lambda_data/c_lambda_lines_gamma=0_rho=0_D=1000_n=500_sigma=0.5_ntrials=100.pkl', mark_every_lambda=0.5, upper_lambda=None,
+                        ylim=None, save_stem=None)
+    plot_c_lambda_lines('c_lambda_data/c_lambda_lines_gamma=10_rho=0.6_D=1000_n=500_sigma=0.5_ntrials=100.pkl', mark_every_lambda=0.5, upper_lambda=None,
+                        ylim=None, save_stem=None)
+
+
+def generate_fig3():
+    plot_f1_grid(gammas=None, rhos=None, directory='simple_sweep', markevery=8,
+                 save_stem="F1_spiked_gen_error", upper_lambda=1.0)
+
+
+def generate_fig4():
+    save_bias_variance_legend()
+    plot_bias_variance('bias_variance_data/bias_variance_gamma=0_rho=0_D=1000_n=500_sigma=0.5_kl=10_ntrials=100_NEW.pkl', mark_every_lambda=0.07, upper_lambda=None, save_stem=None, ylims=(0., 0.8), yticks=np.arange(0, 0.81, 0.2))
+    plot_bias_variance('bias_variance_data/bias_variance_gamma=10_rho=0.6_D=1000_n=500_sigma=0.5_kl=10_ntrials=100_NEW.pkl', mark_every_lambda=0.07, upper_lambda=None, save_stem=None, ylims=(0., 0.8), yticks=np.arange(0, 0.81, 0.2))
+
+
+def generate_fig5(save=False):
+    gammas = [0., 1., 2., 4., 8., 16., 32., 64.]
+    visualize_mixed_partial_at_zero(psi=0.5, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=(-2.5, 2.5), save=save)
+
+
+def generate_fig6():
+    plot_single_run_scaled("new_spiked_sweep/spiked_gamma=10_rho=0_D=3000_n=1500_sigma=1_kl=10_ntrials=100.pkl", xscale="symlog", yticks=[0.65, 0.7, 0.75], ylims=(0.63, 0.775))
+    plot_single_run_scaled("new_spiked_sweep/spiked_gamma=0_rho=0_D=3000_n=1500_sigma=1_kl=10_ntrials=100.pkl", xscale="symlog", yticks=[0.65, 0.7, 0.75], ylims=(0.63, 0.775))
+
 # ---- io --------------------------------------------------------------------
 def _savefig(fig, stem):
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -1229,49 +1308,9 @@ def _savefig(fig, stem):
 
 
 if __name__ == "__main__":
-    plot_single_run_scaled("new_spiked_sweep/spiked_gamma=10_rho=0_D=3000_n=1500_sigma=1_kl=10_ntrials=100.pkl", xscale="symlog")
-    plot_single_run_scaled("new_spiked_sweep/spiked_gamma=0_rho=0_D=3000_n=1500_sigma=1_kl=10_ntrials=100.pkl", xscale="symlog")
-    print(1/0)
-
-    # plot_c_lambda_heatmap('c_lambda_data/c_lambda_heatmap_gamma=0_rho=0_D=1000_n=500_sigma=0.5.pkl', cmap="cool_r", vmin=1.0, vmax=None, save_stem=None)
-    # plot_c_lambda_heatmap('c_lambda_data/c_lambda_heatmap_gamma=10_rho=0.6_D=1000_n=500_sigma=0.5.pkl', cmap="cool_r", vmin=1.0, vmax=None, save_stem=None)
-    plot_c_lambda_lines('c_lambda_data/c_lambda_lines_gamma=0_rho=0_D=1000_n=500_sigma=0.5_ntrials=100.pkl', mark_every_lambda=0.5, upper_lambda=None,
-                        ylim=None, save_stem=None)
-    plot_c_lambda_lines('c_lambda_data/c_lambda_lines_gamma=10_rho=0.6_D=1000_n=500_sigma=0.5_ntrials=100.pkl', mark_every_lambda=0.5, upper_lambda=None,
-                            ylim=None, save_stem=None)
-    print(1./0)
-
-    # plot_single_run('new_spiked_sweep/spiked_gamma=0.25_rho=1_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=3, upper_lambda=None,
-    #                     save_stem=None)
-    # plot_single_run('new_spiked_sweep/spiked_gamma=15_rho=0.1_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.25, upper_lambda=None,
-    #                     save_stem=None)
-    # plot_single_run('new_spiked_sweep/spiked_gamma=10_rho=0.5_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.5, upper_lambda=None,
-    #                 save_stem=None)
-    # plot_single_run('spiked_sweep/spiked_gamma=0_rho=0_D=1000_n=500_sigma=0.5_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.1, upper_lambda=None,
-    #                 save_stem=None)
-    # plot_single_run('new_spiked_sweep/spiked_gamma=20_rho=0_D=2000_n=1000_sigma=0.5_kl=10_ntrials=100.pkl', marker_lambda_spacing=0.1, upper_lambda=None,
-    #                 save_stem=None)
-    # save_single_run_legend()
-
-    # plot_f1_grid()
-    # plot_isotropic()
-    # plot_all_snr_phase()
-    plot_snr_phase_diagram(pkl_path=os.path.join(SNR_PHASE_DIR, "snr_phase_psi=0.2_sigma=1_kl=10_gmax=20_snrmax=1_gammastep=0.1_snrstep=0.001.pkl"), 
-                           # gamma_range=(19., 20.), snr_range=(0., 0.02), 
-                           save=True, have_legend=False)
-    print(1/0)
-
-    base = 'new_spiked_sweep/spiked_{}_D=5000_n=1000_sigma=1_kl=10_ntrials=100.pkl'
-    panels = [('gamma=0.25_rho=1',  None),
-            ('gamma=10_rho=0.5',  1.5),
-            ('gamma=15_rho=0.1',  None)]
-
-    for tag, ym in panels:
-        plot_single_run_scaled(
-            base.format(tag),
-            xscale='symlog',
-            ymax=ym,
-            show_scale_in_title=False,
-            out_dir='paper_figures',
-            save_stem=f'G_{tag}_D=5000_n=1000_sigma=1_symlog',
-        )
+    generate_fig1(save=True, have_legend=True)
+    # generate_fig2()
+    # generate_fig3()
+    # generate_fig4()
+    # generate_fig5()
+    # generate_fig6()

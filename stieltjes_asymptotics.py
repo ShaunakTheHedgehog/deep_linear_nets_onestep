@@ -232,7 +232,10 @@ def visualize_mixed_partial_at_zero(psi, gammas, rhos, noise_stds, ylim=None, sa
         ax.set_ylim(ylim)
     ax.set_xlim(SNRs.min(), SNRs.max())
     if save:
-        plt.savefig(f"paper_figures/feature_learning_advantage_psi={psi:g}.pdf", bbox_inches='tight')
+        noise_tag = ""
+        if isinstance(noise_stds, (float, int)):
+            noise_tag = f"_{noise_stds:g}"
+        plt.savefig(f"paper_figures/feature_learning_advantage_psi={psi:g}{noise_tag}.pdf", bbox_inches='tight')
     else:
         plt.show()
 
@@ -592,8 +595,9 @@ if __name__ == "__main__":
     #                           lambda_max=20.0, out_dir="snr_phase_data",
     #                           save=True, verify=True, vary_sigma=True, rho=0.5)
     # print(1./0)
-    # gammas = [0., 1., 2., 4., 8., 16., 32., 64.]
+    gammas = [0., 1., 2., 4., 8., 16., 32., 64.]
     # visualize_mixed_partial_at_zero(psi=0.1, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=None, save=False)
+    visualize_mixed_partial_at_zero(psi=0.5, gammas=gammas, rhos=np.arange(0, 1.001, 0.001), noise_stds=0.4, ylim=(-2.5, 2.5), save=True)
 
     # print(1./0)
     n = 500
